@@ -6,13 +6,23 @@ Aplicativo desktop offline para organizar projetos, prompts reutilizáveis, dica
 
 Python 3.10 ou superior com Tkinter instalado. Em distribuições Debian/Ubuntu, caso necessário, instale `python3-tk` pelo gerenciador de pacotes do sistema.
 
-## Execução
+## Download para Windows
+
+A versão Windows é publicada como artefato da versão mais recente em [Releases](https://github.com/ericasouzaqa/central-de-prompts/releases/latest). Baixe `CentralDePrompts-Windows.zip`, extraia o arquivo e execute `CentralDePrompts.exe`. O aplicativo não precisa de internet depois de baixado.
+
+O Windows pode exibir um aviso do SmartScreen por o executável ser novo e não possuir assinatura digital comercial. Nesse caso, confirme que o arquivo foi baixado deste repositório privado e escolha **Mais informações > Executar assim mesmo**, se desejar prosseguir.
+
+## Execução a partir do código-fonte
 
 ```bash
 python3 app.py
 ```
 
 No primeiro acesso, informe um nome de usuário e crie uma senha com pelo menos seis caracteres. A senha é armazenada somente como um hash `scrypt`; os dados ficam no banco SQLite local em `~/.central-de-prompts/central.db`.
+
+## Sobre a aplicação
+
+A Central de Prompts é uma biblioteca pessoal privada para preservar contexto entre projetos e ferramentas de IA. Ela foi desenhada para funcionar localmente, sem IA embutida, sem APIs externas, sem conta Manus e sem dependência de internet em tempo de execução.
 
 ## Recursos implementados
 
