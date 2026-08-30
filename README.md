@@ -8,11 +8,16 @@ Python 3.10 ou superior com Tkinter instalado. Em distribuições Debian/Ubuntu,
 
 ## Download para Windows
 
-A versão Windows é publicada como artefato da versão mais recente em [Releases](https://github.com/ericasouzaqa/central-de-prompts/releases/latest). Baixe `CentralDePrompts-Windows.zip`, extraia o arquivo e execute `CentralDePrompts.exe`. O aplicativo não precisa de internet depois de baixado.
+A versão Windows é um pacote **portátil** publicado em [Releases](https://github.com/ericasouzaqa/central-de-prompts/releases/latest). Você não precisa instalar Python, Tkinter, bibliotecas, DLLs, runtime ou qualquer outro programa.
+
+Baixe `CentralDePrompts-Windows.zip`, extraia o arquivo em qualquer pasta e abra `CentralDePrompts.exe` com duplo clique. O executável já contém o runtime Python, o SQLite e os componentes gráficos necessários. Não é necessário abrir o terminal, executar comandos ou manter internet conectada.
 
 O Windows pode exibir um aviso do SmartScreen por o executável ser novo e não possuir assinatura digital comercial. Nesse caso, confirme que o arquivo foi baixado deste repositório privado e escolha **Mais informações > Executar assim mesmo**, se desejar prosseguir.
 
-## Execução a partir do código-fonte
+## Execução a partir do código-fonte (opcional)
+
+A seção abaixo é destinada somente a quem quiser editar ou desenvolver o projeto. Para uso normal no Windows, utilize exclusivamente o executável portátil descrito acima.
+
 
 ```bash
 python3 app.py
