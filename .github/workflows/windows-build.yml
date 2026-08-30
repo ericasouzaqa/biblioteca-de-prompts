@@ -33,15 +33,17 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path dist/CentralDePrompts.exe -DestinationPath CentralDePrompts-Windows.zip
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: CentralDePrompts-Windows
-          path: CentralDePrompts-Windows.zip
+          path: |
+            CentralDePrompts-Windows.zip
+            dist/CentralDePrompts.exe
 
       - name: Publish release asset for version tags
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" CentralDePrompts-Windows.zip --title "Central de Prompts ${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" CentralDePrompts-Windows.zip dist/CentralDePrompts.exe --title "Central de Prompts ${GITHUB_REF_NAME}" --generate-notes
