@@ -83,6 +83,20 @@ class Storage:
         self.db.commit()
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_prompts_search ON prompts(name, category, tool, tags)")
         self.db.commit()
+        self.seed_defaults()
+
+    def seed_defaults(self):
+        if self.db.execute("SELECT COUNT(*) AS n FROM tips").fetchone()["n"]:
+            return
+        t = now()
+        defaults = [
+            ("Analisar arquitetura", "Analisar arquitetura", "Antes de alterar um projeto", "Use para entender limites, dependências e riscos antes de editar.", "Analise a arquitetura atual deste projeto. Identifique componentes, fluxos, dependências, pontos frágeis e riscos. Não altere arquivos ainda; apresente um plano seguro de mudança."),
+            ("Retomar projeto", "Retomar projeto", "Ao voltar após uma pausa", "Recupere rapidamente o contexto e o próximo passo executável.", "Retome este projeto a partir do estado atual. Resuma o que já existe, o que foi concluído, o que está pendente e indique o próximo passo mais seguro."),
+            ("Investigar erro", "Investigar erro", "Quando surgir uma falha", "Organize a investigação sem aplicar correções precipitadas.", "Investigue este erro de forma sistemática. Explique a causa provável, quais evidências faltam, como reproduzir e proponha uma correção mínima com testes."),
+            ("Revisar código", "Revisar código", "Antes de publicar uma alteração", "Procure defeitos, regressões e problemas de manutenção.", "Revise o código abaixo procurando bugs, riscos de segurança, regressões, casos extremos e problemas de manutenção. Liste achados por prioridade e só depois proponha ajustes."),
+        ]
+        self.db.executemany("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", [x + (t, t) for x in defaults])
+        self.db.commit()
 
     def setting(self, key, default=None):
         row = self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
@@ -173,27 +187,75 @@ class MainApp(ttk.Frame):
         scroll = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); scroll.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=scroll.set)
         return frame, tree
 
-    def tab_header(self, parent, title, command):
-        top = ttk.Frame(parent); top.pack(fill="x", pady=(0, 8)); ttk.Label(top, text=title, style="Section.TLabel").pack(side="left"); ttk.Button(top, text="＋ Novo", command=command).pack(side="right")
+    def tab_header(self, parent, title, command, tree=None, extra=None):
+        top = ttk.Frame(parent); top.pack(fill="x", pady=(0, 8)); ttk.Label(top, text=title, style="Section.TLabel").pack(side="left")
+        if extra:
+            for label, action in extra:
+                ttk.Button(top, text=label, command=action).pack(side="right", padx=(6, 0))
+        if tree:
+            ttk.Button(top, text="Excluir", command=lambda: self.delete_selected(tree)).pack(side="right", padx=(6, 0))
+            ttk.Button(top, text="Editar", command=command).pack(side="right", padx=(6, 0))
+        ttk.Button(top, text="＋ Novo", command=lambda: command()).pack(side="right")
+
+    def delete_selected(self, tree):
+        rid = self.selected(tree)
+        if not rid or not messagebox.askyesno(APP_NAME, "Excluir o registro selecionado? Esta ação não pode ser desfeita."):
+            return
+        table = {self.project_tree: "projects", self.prompt_tree: "prompts", self.tip_tree: "tips", self.code_tree: "codes"}.get(tree)
+        if table:
+            self.storage.db.execute(f"DELETE FROM {table} WHERE id=?", (rid,)); self.storage.db.commit(); self.refresh_all()
+
+    def copy_prompt(self):
+        rid = self.selected(self.prompt_tree)
+        if not rid: return
+        row = self.storage.db.execute("SELECT content FROM prompts WHERE id=?", (rid,)).fetchone()
+        if row:
+            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Prompt copiado para a área de transferência.")
+
+    def toggle_favorite(self):
+        rid = self.selected(self.prompt_tree)
+        if not rid: return
+        self.storage.db.execute("UPDATE prompts SET favorite=CASE favorite WHEN 1 THEN 0 ELSE 1 END, updated_at=? WHERE id=?", (now(), rid)); self.storage.db.commit(); self.refresh_all()
+
+    def copy_code(self):
+        rid = self.selected(self.code_tree)
+        if not rid: return
+        row = self.storage.db.execute("SELECT content FROM codes WHERE id=?", (rid,)).fetchone()
+        if row:
+            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Código copiado para a área de transferência.")
+
+    def copy_tip(self):
+        rid = self.selected(self.tip_tree)
+        if not rid: return
+        row = self.storage.db.execute("SELECT content FROM tips WHERE id=?", (rid,)).fetchone()
+        if row:
+            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Prompt da dica copiado para a área de transferência.")
 
     def make_projects_tab(self):
         tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Projetos"); self.tab_header(tab, "Projetos", lambda: self.edit_project())
         frame, self.project_tree = self.make_tree(tab, ("name", "status", "tool", "github", "updated"), ("Projeto", "Status", "Ferramenta", "Repositório", "Atualizado")); frame.pack(fill="both", expand=True)
+        self.tab_header(tab, "Ações de projetos", lambda: self.edit_project(), self.project_tree)
         self.project_tree.bind("<Double-1>", lambda e: self.edit_project())
         self.project_tree.bind("<<TreeviewSelect>>", lambda e: self.show_project_detail())
         self.project_detail = tk.Text(tab, height=7, wrap="word", state="disabled", bg="#f7f9fb", relief="flat"); self.project_detail.pack(fill="x", pady=(8, 0)); return tab
 
     def make_prompts_tab(self):
         tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Biblioteca de Prompts"); self.tab_header(tab, "Prompts reutilizáveis", lambda: self.edit_prompt())
-        frame, self.prompt_tree = self.make_tree(tab, ("favorite", "name", "category", "project", "tool", "tags"), ("★", "Nome", "Categoria", "Projeto", "Ferramenta", "Tags")); frame.pack(fill="both", expand=True); self.prompt_tree.bind("<Double-1>", lambda e: self.edit_prompt()); return tab
+        frame, self.prompt_tree = self.make_tree(tab, ("favorite", "name", "category", "project", "tool", "tags"), ("★", "Nome", "Categoria", "Projeto", "Ferramenta", "Tags")); frame.pack(fill="both", expand=True)
+        self.tab_header(tab, "Ações de prompts", lambda: self.edit_prompt(), self.prompt_tree, [("Copiar", self.copy_prompt), ("Favoritar", self.toggle_favorite)])
+        self.prompt_tree.bind("<Double-1>", lambda e: self.edit_prompt()); return tab
 
     def make_tips_tab(self):
         tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Dicas de Prompt"); self.tab_header(tab, "Dicas prontas", lambda: self.edit_tip())
-        frame, self.tip_tree = self.make_tree(tab, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True); self.tip_tree.bind("<Double-1>", lambda e: self.edit_tip()); return tab
+        frame, self.tip_tree = self.make_tree(tab, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True)
+        self.tab_header(tab, "Ações de dicas", lambda: self.edit_tip(), self.tip_tree, [("Copiar", self.copy_tip)])
+        self.tip_tree.bind("<Double-1>", lambda e: self.edit_tip()); return tab
 
     def make_codes_tab(self):
         tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Biblioteca de Códigos"); self.tab_header(tab, "Códigos técnicos úteis", lambda: self.edit_code())
-        frame, self.code_tree = self.make_tree(tab, ("name", "language", "project", "tags"), ("Nome", "Linguagem", "Projeto", "Tags")); frame.pack(fill="both", expand=True); self.code_tree.bind("<Double-1>", lambda e: self.edit_code()); return tab
+        frame, self.code_tree = self.make_tree(tab, ("name", "language", "project", "tags"), ("Nome", "Linguagem", "Projeto", "Tags")); frame.pack(fill="both", expand=True)
+        self.tab_header(tab, "Ações de códigos", lambda: self.edit_code(), self.code_tree, [("Copiar", self.copy_code)])
+        self.code_tree.bind("<Double-1>", lambda e: self.edit_code()); return tab
 
     def make_settings_tab(self):
         tab = ttk.Frame(self.tabs, padding=18); self.tabs.add(tab, text="Configurações")
