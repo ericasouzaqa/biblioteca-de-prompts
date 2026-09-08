@@ -6,26 +6,21 @@ import os
 import secrets
 import shutil
 import sqlite3
-import stat
-import sys
 import tempfile
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_NAME = "Central de Prompts"
+APP_NAME = "Biblioteca de Prompts"
 APP_DIR = Path.home() / ".central-de-prompts"
 DB_PATH = APP_DIR / "central.db"
-
+FILE_DIR = APP_DIR / "files"
 STATUSES = ["Em testes", "Ativo", "Em construção", "Congelado"]
 PROMPT_TOOLS = ["ChatGPT", "Manus", "Copilot", "Claude", "Gemini", "Outra"]
-TIP_CATEGORIES = [
-    "Analisar arquitetura", "Retomar projeto", "Continuar implementação",
-    "Revisar código", "Refatorar com segurança", "Investigar erro",
-    "Preparar publicação", "Melhorar testes", "Criar documentação",
-    "Avaliar impacto de alteração"
-]
+TIP_CATEGORIES = ["Analisar arquitetura", "Retomar projeto", "Continuar implementação", "Revisar código", "Refatorar com segurança", "Investigar erro", "Preparar publicação", "Melhorar testes", "Criar documentação", "Avaliar impacto de alteração"]
+FILE_CATEGORIES = ["Templates", "Documentações", "Referências", "Arquivos Gerais"]
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".zip", ".png", ".jpg", ".jpeg"}
 
 
 def now():
@@ -34,364 +29,337 @@ def now():
 
 def hash_password(password, salt=None):
     salt = salt or secrets.token_bytes(16)
-    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
-    return base64.b64encode(salt + digest).decode("ascii")
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+    return base64.b64encode(salt + digest).decode()
 
 
 def verify_password(password, stored):
     try:
-        raw = base64.b64decode(stored.encode("ascii"))
-        salt, expected = raw[:16], raw[16:]
-        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
-        return hmac.compare_digest(actual, expected)
+        raw = base64.b64decode(stored.encode())
+        actual = hashlib.scrypt(password.encode(), salt=raw[:16], n=2**14, r=8, p=1)
+        return hmac.compare_digest(actual, raw[16:])
     except Exception:
         return False
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 class Storage:
-    def __init__(self):
-        APP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self.db = sqlite3.connect(DB_PATH)
+    def __init__(self, base_dir=None):
+        self.base_dir = Path(base_dir) if base_dir else APP_DIR
+        self.base_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.file_dir = self.base_dir / "files"
+        self.file_dir.mkdir(mode=0o700, exist_ok=True)
+        self.db_path = self.base_dir / "central.db"
+        self._pre_migration_backup()
+        self.db = sqlite3.connect(self.db_path)
         self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA foreign_keys = ON")
-        self.db.execute("PRAGMA secure_delete = ON")
+        self.db.execute("PRAGMA foreign_keys=ON")
+        self.db.execute("PRAGMA secure_delete=ON")
+        self._schema()
+
+    def _pre_migration_backup(self):
+        if self.db_path.exists() and self.db_path.stat().st_size:
+            backup = self.base_dir / "central.db.before-update"
+            if not backup.exists():
+                shutil.copy2(self.db_path, backup)
+
+    def _schema(self):
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS projects (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, objective TEXT,
-            github_repo TEXT, repo_link TEXT, tool TEXT, status TEXT NOT NULL,
-            last_prompt TEXT, last_interaction TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS prompts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT,
-            project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, tool TEXT,
-            objective TEXT, trigger TEXT, when_to_use TEXT, content TEXT NOT NULL,
-            expected_result TEXT, notes TEXT, tags TEXT, favorite INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS tips (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, category TEXT,
-            when_to_use TEXT, explanation TEXT, content TEXT NOT NULL,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, language TEXT,
-            project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, purpose TEXT,
-            content TEXT NOT NULL, tags TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-        );
+        CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, objective TEXT, github_repo TEXT, repo_link TEXT, tool TEXT, status TEXT NOT NULL, last_prompt TEXT, last_interaction TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS prompts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT, project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, tool TEXT, objective TEXT, trigger TEXT, when_to_use TEXT, content TEXT NOT NULL, expected_result TEXT, notes TEXT, tags TEXT, favorite INTEGER DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS tips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, category TEXT, when_to_use TEXT, explanation TEXT, content TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS codes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, language TEXT, project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, purpose TEXT, content TEXT NOT NULL, tags TEXT, notes TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, stored_name TEXT NOT NULL UNIQUE, extension TEXT NOT NULL, category TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, notes TEXT, created_at TEXT NOT NULL, accessed_at TEXT);
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_prompts_search ON prompts(name, category, tool, tags);
+        CREATE INDEX IF NOT EXISTS idx_files_search ON files(name, category, extension);
         """)
-        self.db.commit()
-        self.db.execute("CREATE INDEX IF NOT EXISTS idx_prompts_search ON prompts(name, category, tool, tags)")
         self.db.commit()
         self.seed_defaults()
 
     def seed_defaults(self):
-        if self.db.execute("SELECT COUNT(*) AS n FROM tips").fetchone()["n"]:
+        if self.db.execute("SELECT COUNT(*) n FROM tips").fetchone()["n"]:
             return
         t = now()
-        defaults = [
-            ("Analisar arquitetura", "Analisar arquitetura", "Antes de alterar um projeto", "Use para entender limites, dependências e riscos antes de editar.", "Analise a arquitetura atual deste projeto. Identifique componentes, fluxos, dependências, pontos frágeis e riscos. Não altere arquivos ainda; apresente um plano seguro de mudança."),
-            ("Retomar projeto", "Retomar projeto", "Ao voltar após uma pausa", "Recupere rapidamente o contexto e o próximo passo executável.", "Retome este projeto a partir do estado atual. Resuma o que já existe, o que foi concluído, o que está pendente e indique o próximo passo mais seguro."),
-            ("Investigar erro", "Investigar erro", "Quando surgir uma falha", "Organize a investigação sem aplicar correções precipitadas.", "Investigue este erro de forma sistemática. Explique a causa provável, quais evidências faltam, como reproduzir e proponha uma correção mínima com testes."),
-            ("Revisar código", "Revisar código", "Antes de publicar uma alteração", "Procure defeitos, regressões e problemas de manutenção.", "Revise o código abaixo procurando bugs, riscos de segurança, regressões, casos extremos e problemas de manutenção. Liste achados por prioridade e só depois proponha ajustes."),
-        ]
-        self.db.executemany("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", [x + (t, t) for x in defaults])
-        self.db.commit()
+        rows = [("Analisar arquitetura", "Analisar arquitetura", "Antes de alterar um projeto", "Entenda limites, dependências e riscos antes de editar.", "Analise a arquitetura atual deste projeto. Identifique componentes, fluxos, dependências, pontos frágeis e riscos. Não altere arquivos ainda; apresente um plano seguro."), ("Retomar projeto", "Retomar projeto", "Ao voltar após uma pausa", "Recupere rapidamente o contexto e o próximo passo.", "Retome este projeto a partir do estado atual. Resuma o que já existe, o que foi concluído, o que está pendente e indique o próximo passo mais seguro."), ("Investigar erro", "Investigar erro", "Quando surgir uma falha", "Organize a investigação antes de aplicar correções.", "Investigue este erro de forma sistemática. Explique a causa provável, evidências faltantes, reprodução e uma correção mínima com testes.")]
+        self.db.executemany("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", [r + (t, t) for r in rows]); self.db.commit()
 
     def setting(self, key, default=None):
         row = self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
         return row["value"] if row else default
 
     def set_setting(self, key, value):
-        self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", (key, value))
-        self.db.commit()
+        self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", (key, str(value))); self.db.commit()
 
     def rows(self, table, where="", params=()):
+        if table not in {"projects", "prompts", "tips", "codes", "files"}:
+            raise ValueError("Tabela não permitida")
         return self.db.execute(f"SELECT * FROM {table} {where}", params).fetchall()
 
-    def close(self):
-        self.db.close()
+    def counts(self):
+        return {k: self.db.execute(f"SELECT COUNT(*) n FROM {k}").fetchone()["n"] for k in ("prompts", "projects", "files")}
+
+    def close(self): self.db.close()
+
+    def issue_reset_token(self, email):
+        configured = self.setting("email", "")
+        if not configured or not hmac.compare_digest(configured.lower(), email.strip().lower()):
+            return None
+        self.db.execute("UPDATE password_reset_tokens SET used_at=? WHERE used_at IS NULL AND expires_at < ?", (now(), now()))
+        raw = secrets.token_urlsafe(32); digest = hashlib.sha256(raw.encode()).hexdigest(); expiry = (datetime.now() + timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+        self.db.execute("INSERT INTO password_reset_tokens(token_hash,expires_at,created_at) VALUES(?,?,?)", (digest, expiry, now())); self.db.commit(); return raw
+
+    def reset_password(self, token, new_password):
+        digest = hashlib.sha256(token.encode()).hexdigest(); row = self.db.execute("SELECT * FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>=? ORDER BY id DESC LIMIT 1", (digest, now())).fetchone()
+        if not row: return False
+        self.set_setting("password_hash", hash_password(new_password)); self.db.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?", (now(), row["id"])); self.db.commit(); return True
 
 
 class LoginFrame(ttk.Frame):
     def __init__(self, master, on_login):
-        super().__init__(master, padding=40)
-        self.on_login = on_login
-        self.storage = master.storage
-        self.has_user = bool(self.storage.setting("username"))
-        self.columnconfigure(0, weight=1)
-        ttk.Label(self, text="Central de Prompts", style="Title.TLabel").grid(row=0, column=0, pady=(20, 8))
-        ttk.Label(self, text="Sua biblioteca pessoal, privada e offline", style="Subtitle.TLabel").grid(row=1, column=0, pady=(0, 28))
-        box = ttk.LabelFrame(self, text="Acesso privado", padding=20)
-        box.grid(row=2, column=0, sticky="ew")
-        box.columnconfigure(1, weight=1)
-        ttk.Label(box, text="Usuário").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=6)
-        self.user = ttk.Entry(box, width=32)
-        self.user.grid(row=0, column=1, sticky="ew", pady=6)
-        ttk.Label(box, text="Senha").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=6)
-        self.password = ttk.Entry(box, show="•", width=32)
-        self.password.grid(row=1, column=1, sticky="ew", pady=6)
-        self.password.bind("<Return>", lambda e: self.submit())
-        ttk.Button(box, text="Entrar", command=self.submit).grid(row=2, column=1, sticky="e", pady=(16, 0))
-        if not self.has_user:
-            ttk.Label(self, text="Primeiro acesso: informe um usuário e crie sua senha local.", foreground="#52606d").grid(row=3, column=0, pady=18)
+        super().__init__(master, padding=32); self.master = master; self.storage = master.storage; self.on_login = on_login; self.columnconfigure(0, weight=1)
+        ttk.Label(self, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=0, pady=(28, 4)); ttk.Label(self, text="Seu contexto, organizado e privado", style="Subtitle.TLabel").grid(row=1, column=0, pady=(0, 24))
+        box = ttk.LabelFrame(self, text="Acesso privado", padding=18); box.grid(row=2, column=0, sticky="ew"); box.columnconfigure(1, weight=1)
+        self.user = self.field(box, 0, "Usuário"); self.password = self.field(box, 1, "Senha", True)
+        ttk.Button(box, text="Entrar", command=self.submit).grid(row=2, column=1, sticky="e", pady=(14, 4)); self.password.bind("<Return>", lambda _: self.submit())
+        ttk.Button(self, text="Esqueci minha senha", style="Link.TButton", command=self.recover).grid(row=3, column=0, pady=12)
+        if not self.storage.setting("username"): ttk.Label(self, text="Primeiro acesso: informe um usuário e uma senha com pelo menos 6 caracteres.", style="Muted.TLabel").grid(row=4, column=0)
+
+    def field(self, parent, row, label, secret=False):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=6); entry = ttk.Entry(parent, show="•" if secret else ""); entry.grid(row=row, column=1, sticky="ew", pady=6); return entry
 
     def submit(self):
-        user, password = self.user.get().strip(), self.password.get()
-        if not user or len(password) < 6:
-            messagebox.showwarning(APP_NAME, "Informe o usuário e uma senha com pelo menos 6 caracteres.")
-            return
-        stored_user = self.storage.setting("username")
-        if not stored_user:
-            self.storage.set_setting("username", user)
-            self.storage.set_setting("password_hash", hash_password(password))
-            messagebox.showinfo(APP_NAME, "Acesso local criado com sucesso.")
-            self.on_login(user)
-        elif hmac.compare_digest(stored_user, user) and verify_password(password, self.storage.setting("password_hash", "")):
-            self.on_login(user)
-        else:
-            messagebox.showerror(APP_NAME, "Usuário ou senha inválidos.")
+        user, password = self.user.get().strip(), self.password.get(); stored = self.storage.setting("username")
+        if not user or len(password) < 6: messagebox.showwarning(APP_NAME, "Informe usuário e senha com pelo menos 6 caracteres."); return
+        if not stored:
+            self.storage.set_setting("username", user); self.storage.set_setting("password_hash", hash_password(password)); self.on_login(user)
+        elif hmac.compare_digest(stored, user) and verify_password(password, self.storage.setting("password_hash", "")): self.on_login(user)
+        else: messagebox.showerror(APP_NAME, "Usuário ou senha inválidos.")
+
+    def recover(self):
+        email = simpledialog.askstring(APP_NAME, "Informe o e-mail de recuperação configurado:", parent=self)
+        if not email: return
+        token = self.storage.issue_reset_token(email)
+        if not token:
+            messagebox.showerror(APP_NAME, "E-mail não reconhecido ou não configurado. Configure-o na aba Configurações após entrar."); return
+        messagebox.showinfo(APP_NAME, "Modo offline: token temporário gerado. Anote este código e use-o para redefinir a senha:\n\n" + token)
+        new = simpledialog.askstring(APP_NAME, "Cole o token temporário:", parent=self)
+        password = simpledialog.askstring(APP_NAME, "Nova senha:", show="•", parent=self) if new else None
+        if new and password and len(password) >= 6 and self.storage.reset_password(new, password): messagebox.showinfo(APP_NAME, "Senha redefinida. Faça login com a nova senha.")
+        else: messagebox.showerror(APP_NAME, "Token inválido/expirado ou senha muito curta.")
 
 
 class MainApp(ttk.Frame):
     def __init__(self, master, username, logout):
-        super().__init__(master, padding=14)
-        self.master = master
-        self.storage = master.storage
-        self.username = username
-        self.logout = logout
-        self.project_map = {}
-        self.build()
+        super().__init__(master, padding=12); self.master = master; self.storage = master.storage; self.username = username; self.logout = logout; self.project_map = {}; self.search_var = tk.StringVar(); self.build(); self.bind_all("<Control-k>", lambda _: self.search.focus_set())
 
     def build(self):
         self.columnconfigure(0, weight=1); self.rowconfigure(2, weight=1)
-        header = ttk.Frame(self)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 10)); header.columnconfigure(1, weight=1)
-        ttk.Label(header, text="Central de Prompts", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text=f"Sessão local: {self.username}", style="Subtitle.TLabel").grid(row=0, column=1, sticky="w", padx=20)
-        ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=2)
-        search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 10)); search.columnconfigure(1, weight=1)
-        ttk.Label(search, text="⌕ Pesquisa global").grid(row=0, column=0, padx=(0, 10))
-        self.search_var = tk.StringVar(); entry = ttk.Entry(search, textvariable=self.search_var)
-        entry.grid(row=0, column=1, sticky="ew"); entry.bind("<KeyRelease>", lambda e: self.refresh_all())
-        ttk.Button(search, text="Limpar", command=lambda: self.search_var.set("")).grid(row=0, column=2, padx=(8, 0))
-        self.tabs = ttk.Notebook(self); self.tabs.grid(row=2, column=0, sticky="nsew")
-        self.project_tab = self.make_projects_tab(); self.prompt_tab = self.make_prompts_tab(); self.tip_tab = self.make_tips_tab(); self.code_tab = self.make_codes_tab(); self.settings_tab = self.make_settings_tab()
-        self.refresh_all()
+        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(1, weight=1); ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=0, sticky="w"); ttk.Label(header, text=f"Olá, {self.username}", style="Subtitle.TLabel").grid(row=0, column=1, sticky="w", padx=16); ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=2)
+        search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 8)); search.columnconfigure(1, weight=1); ttk.Label(search, text="Pesquisa global  (Ctrl+K)").grid(row=0, column=0, padx=(0, 8)); self.search = ttk.Entry(search, textvariable=self.search_var); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", lambda _: self.refresh_all()); ttk.Button(search, text="Limpar", command=lambda: self.search_var.set("")).grid(row=0, column=2, padx=6)
+        self.tabs = ttk.Notebook(self); self.tabs.grid(row=2, column=0, sticky="nsew"); self.dashboard_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
 
-    def make_tree(self, parent, columns, headings):
-        frame = ttk.Frame(parent); frame.columnconfigure(0, weight=1); frame.rowconfigure(0, weight=1)
-        tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
-        for col, head in zip(columns, headings): tree.heading(col, text=head); tree.column(col, width=150, anchor="w")
-        tree.grid(row=0, column=0, sticky="nsew")
-        scroll = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); scroll.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=scroll.set)
-        return frame, tree
+    def dashboard_tab(self):
+        tab = ttk.Frame(self.tabs, padding=18); self.tabs.add(tab, text="Dashboard"); tab.columnconfigure((0, 1, 2, 3), weight=1); ttk.Label(tab, text="Visão geral", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 14))
+        self.metrics = {}
+        for i, (key, label) in enumerate([("prompts", "Prompts"), ("favorites", "Favoritos"), ("categories", "Categorias"), ("files", "Arquivos")]):
+            card = ttk.LabelFrame(tab, text=label, padding=16); card.grid(row=1, column=i, sticky="nsew", padx=4); self.metrics[key] = ttk.Label(card, text="0", style="Metric.TLabel"); self.metrics[key].pack()
+        ttk.Label(tab, text="Atalhos rápidos", style="Section.TLabel").grid(row=2, column=0, columnspan=4, sticky="w", pady=(26, 8)); actions = ttk.Frame(tab); actions.grid(row=3, column=0, columnspan=4, sticky="w")
+        for label, fn in [("Novo Prompt", self.new_prompt), ("Favoritos", lambda: self.show_favorites()), ("Repositório", lambda: self.tabs.select(self.repository)), ("Configurações", lambda: self.tabs.select(self.settings))]: ttk.Button(actions, text=label, command=fn).pack(side="left", padx=(0, 8))
+        self.activity = ttk.Label(tab, text="", style="Muted.TLabel"); self.activity.grid(row=4, column=0, columnspan=4, sticky="w", pady=24)
 
-    def tab_header(self, parent, title, command, tree=None, extra=None):
-        top = ttk.Frame(parent); top.pack(fill="x", pady=(0, 8)); ttk.Label(top, text=title, style="Section.TLabel").pack(side="left")
-        if extra:
-            for label, action in extra:
-                ttk.Button(top, text=label, command=action).pack(side="right", padx=(6, 0))
-        if tree:
-            ttk.Button(top, text="Excluir", command=lambda: self.delete_selected(tree)).pack(side="right", padx=(6, 0))
-            ttk.Button(top, text="Editar", command=command).pack(side="right", padx=(6, 0))
-        ttk.Button(top, text="＋ Novo", command=lambda: command()).pack(side="right")
+    def tree(self, parent, cols, heads):
+        frame = ttk.Frame(parent); frame.columnconfigure(0, weight=1); frame.rowconfigure(0, weight=1); tree = ttk.Treeview(frame, columns=cols, show="headings");
+        for c, h in zip(cols, heads): tree.heading(c, text=h); tree.column(c, width=150, anchor="w")
+        tree.grid(row=0, column=0, sticky="nsew"); scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); scrollbar.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=scrollbar.set); return frame, tree
 
-    def delete_selected(self, tree):
-        rid = self.selected(tree)
-        if not rid or not messagebox.askyesno(APP_NAME, "Excluir o registro selecionado? Esta ação não pode ser desfeita."):
-            return
-        table = {self.project_tree: "projects", self.prompt_tree: "prompts", self.tip_tree: "tips", self.code_tree: "codes"}.get(tree)
-        if table:
-            self.storage.db.execute(f"DELETE FROM {table} WHERE id=?", (rid,)); self.storage.db.commit(); self.refresh_all()
+    def toolbar(self, parent, title, new, edit, delete, extras=()):
+        bar = ttk.Frame(parent); bar.pack(fill="x", pady=(0, 8)); ttk.Label(bar, text=title, style="Section.TLabel").pack(side="left");
+        for label, fn in extras: ttk.Button(bar, text=label, command=fn).pack(side="right", padx=(5, 0))
+        ttk.Button(bar, text="Excluir", command=delete).pack(side="right", padx=(5, 0)); ttk.Button(bar, text="Editar", command=edit).pack(side="right", padx=(5, 0)); ttk.Button(bar, text="＋ Novo", command=new).pack(side="right")
 
-    def copy_prompt(self):
-        rid = self.selected(self.prompt_tree)
-        if not rid: return
-        row = self.storage.db.execute("SELECT content FROM prompts WHERE id=?", (rid,)).fetchone()
-        if row:
-            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Prompt copiado para a área de transferência.")
+    def project_tab(self):
+        self.projects = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.projects, text="Projetos"); self.toolbar(self.projects, "Projetos", self.new_project, self.edit_project, lambda: self.delete(self.project_tree, "projects")); frame, self.project_tree = self.tree(self.projects, ("name", "status", "tool", "github"), ("Projeto", "Status", "Ferramenta", "Repositório")); frame.pack(fill="both", expand=True); self.project_tree.bind("<Double-1>", lambda _: self.edit_project())
 
-    def toggle_favorite(self):
-        rid = self.selected(self.prompt_tree)
-        if not rid: return
-        self.storage.db.execute("UPDATE prompts SET favorite=CASE favorite WHEN 1 THEN 0 ELSE 1 END, updated_at=? WHERE id=?", (now(), rid)); self.storage.db.commit(); self.refresh_all()
+    def prompt_tab(self):
+        self.prompts = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.prompts, text="Prompts"); self.toolbar(self.prompts, "Biblioteca de Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Copiar", self.copy_prompt), ("★ Favoritar", self.favorite)]); frame, self.prompt_tree = self.tree(self.prompts, ("fav", "name", "category", "project", "tool", "tags"), ("★", "Nome", "Categoria", "Projeto", "Ferramenta", "Tags")); frame.pack(fill="both", expand=True); self.prompt_tree.bind("<Double-1>", lambda _: self.edit_prompt())
 
-    def copy_code(self):
-        rid = self.selected(self.code_tree)
-        if not rid: return
-        row = self.storage.db.execute("SELECT content FROM codes WHERE id=?", (rid,)).fetchone()
-        if row:
-            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Código copiado para a área de transferência.")
+    def tip_tab(self):
+        self.tips = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.tips, text="Dicas"); self.toolbar(self.tips, "Dicas de Prompt", self.new_tip, self.edit_tip, lambda: self.delete(self.tip_tree, "tips"), [("Copiar", self.copy_tip)]); frame, self.tip_tree = self.tree(self.tips, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True)
 
-    def copy_tip(self):
-        rid = self.selected(self.tip_tree)
-        if not rid: return
-        row = self.storage.db.execute("SELECT content FROM tips WHERE id=?", (rid,)).fetchone()
-        if row:
-            self.master.clipboard_clear(); self.master.clipboard_append(row["content"]); messagebox.showinfo(APP_NAME, "Prompt da dica copiado para a área de transferência.")
+    def code_tab(self):
+        self.codes = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.codes, text="Códigos"); self.toolbar(self.codes, "Biblioteca de Códigos", self.new_code, self.edit_code, lambda: self.delete(self.code_tree, "codes"), [("Copiar", self.copy_code)]); frame, self.code_tree = self.tree(self.codes, ("name", "language", "project", "tags"), ("Nome", "Linguagem", "Projeto", "Tags")); frame.pack(fill="both", expand=True)
 
-    def make_projects_tab(self):
-        tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Projetos"); self.tab_header(tab, "Projetos", lambda: self.edit_project())
-        frame, self.project_tree = self.make_tree(tab, ("name", "status", "tool", "github", "updated"), ("Projeto", "Status", "Ferramenta", "Repositório", "Atualizado")); frame.pack(fill="both", expand=True)
-        self.tab_header(tab, "Ações de projetos", lambda: self.edit_project(), self.project_tree)
-        self.project_tree.bind("<Double-1>", lambda e: self.edit_project())
-        self.project_tree.bind("<<TreeviewSelect>>", lambda e: self.show_project_detail())
-        self.project_detail = tk.Text(tab, height=7, wrap="word", state="disabled", bg="#f7f9fb", relief="flat"); self.project_detail.pack(fill="x", pady=(8, 0)); return tab
+    def repository_tab(self):
+        self.repository = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.repository, text="📁 Repositório"); self.toolbar(self.repository, "Arquivos relacionados", self.upload_file, self.file_info, lambda: self.delete_file(), [("Baixar", self.download_file)]); frame, self.file_tree = self.tree(self.repository, ("name", "category", "extension", "size", "created"), ("Arquivo", "Categoria", "Tipo", "Tamanho", "Adicionado")); frame.pack(fill="both", expand=True)
 
-    def make_prompts_tab(self):
-        tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Biblioteca de Prompts"); self.tab_header(tab, "Prompts reutilizáveis", lambda: self.edit_prompt())
-        frame, self.prompt_tree = self.make_tree(tab, ("favorite", "name", "category", "project", "tool", "tags"), ("★", "Nome", "Categoria", "Projeto", "Ferramenta", "Tags")); frame.pack(fill="both", expand=True)
-        self.tab_header(tab, "Ações de prompts", lambda: self.edit_prompt(), self.prompt_tree, [("Copiar", self.copy_prompt), ("Favoritar", self.toggle_favorite)])
-        self.prompt_tree.bind("<Double-1>", lambda e: self.edit_prompt()); return tab
+    def settings_tab(self):
+        self.settings = ttk.Frame(self.tabs, padding=18); self.tabs.add(self.settings, text="Configurações"); ttk.Label(self.settings, text="Configurações e proteção", style="Section.TLabel").pack(anchor="w"); ttk.Label(self.settings, text="Dados locais, sem envio automático para serviços externos.", style="Muted.TLabel").pack(anchor="w", pady=(4, 16));
+        for text, fn in [("Exportar backup seguro", self.export_backup), ("Importar backup seguro", self.import_backup), ("Alterar senha", self.change_password), ("Configurar e-mail de recuperação", self.configure_email), ("Abrir pasta de dados", lambda: messagebox.showinfo(APP_NAME, str(self.storage.base_dir))), ("Sobre a aplicação", self.about)]: ttk.Button(self.settings, text=text, command=fn).pack(anchor="w", pady=4)
+        ttk.Separator(self.settings).pack(fill="x", pady=18); ttk.Label(self.settings, text="Recuperação por e-mail requer um serviço externo; no modo offline, um token temporário é exibido localmente e expira em 20 minutos.", wraplength=700, style="Muted.TLabel").pack(anchor="w")
 
-    def make_tips_tab(self):
-        tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Dicas de Prompt"); self.tab_header(tab, "Dicas prontas", lambda: self.edit_tip())
-        frame, self.tip_tree = self.make_tree(tab, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True)
-        self.tab_header(tab, "Ações de dicas", lambda: self.edit_tip(), self.tip_tree, [("Copiar", self.copy_tip)])
-        self.tip_tree.bind("<Double-1>", lambda e: self.edit_tip()); return tab
-
-    def make_codes_tab(self):
-        tab = ttk.Frame(self.tabs, padding=12); self.tabs.add(tab, text="Biblioteca de Códigos"); self.tab_header(tab, "Códigos técnicos úteis", lambda: self.edit_code())
-        frame, self.code_tree = self.make_tree(tab, ("name", "language", "project", "tags"), ("Nome", "Linguagem", "Projeto", "Tags")); frame.pack(fill="both", expand=True)
-        self.tab_header(tab, "Ações de códigos", lambda: self.edit_code(), self.code_tree, [("Copiar", self.copy_code)])
-        self.code_tree.bind("<Double-1>", lambda e: self.edit_code()); return tab
-
-    def make_settings_tab(self):
-        tab = ttk.Frame(self.tabs, padding=18); self.tabs.add(tab, text="Configurações")
-        ttk.Label(tab, text="Configurações e proteção local", style="Section.TLabel").pack(anchor="w")
-        ttk.Label(tab, text="Os dados ficam em ~/.central-de-prompts e não são enviados para serviços externos.", wraplength=600).pack(anchor="w", pady=(8, 20))
-        ttk.Button(tab, text="Exportar backup JSON", command=self.export_backup).pack(anchor="w", pady=4)
-        ttk.Button(tab, text="Importar backup JSON", command=self.import_backup).pack(anchor="w", pady=4)
-        ttk.Button(tab, text="Alterar senha", command=self.change_password).pack(anchor="w", pady=4)
-        ttk.Button(tab, text="Abrir pasta de dados", command=lambda: messagebox.showinfo(APP_NAME, str(APP_DIR))).pack(anchor="w", pady=4)
-        ttk.Separator(tab).pack(fill="x", pady=20)
-        ttk.Label(tab, text="A exclusão de registros ocorre somente quando solicitada pelo usuário.", foreground="#52606d").pack(anchor="w")
-        return tab
-
-    def query_filter(self, table, extra="", params=()):
-        q = self.search_var.get().strip().lower(); where = extra; values = list(params)
+    def query(self, table, order="updated_at DESC", extra="", params=()):
+        q = self.search_var.get().strip().lower(); values = list(params); where = extra
         if q:
-            fields = {"projects": "name || ' ' || objective || ' ' || github_repo || ' ' || tool || ' ' || status", "prompts": "name || ' ' || category || ' ' || objective || ' ' || trigger || ' ' || content || ' ' || tags", "tips": "title || ' ' || category || ' ' || when_to_use || ' ' || explanation || ' ' || content", "codes": "name || ' ' || language || ' ' || purpose || ' ' || content || ' ' || tags"}[table]
+            fields = {"projects": "name || ' ' || objective || ' ' || github_repo || ' ' || tool || ' ' || status", "prompts": "name || ' ' || category || ' ' || objective || ' ' || trigger || ' ' || content || ' ' || tags", "tips": "title || ' ' || category || ' ' || when_to_use || ' ' || explanation || ' ' || content", "codes": "name || ' ' || language || ' ' || purpose || ' ' || content || ' ' || tags", "files": "name || ' ' || category || ' ' || extension || ' ' || notes"}[table]
             where = (where + " AND " if where else "WHERE ") + f"LOWER({fields}) LIKE ?"; values.append(f"%{q}%")
-        return self.storage.rows(table, where, values)
+        return self.storage.rows(table, where + (" ORDER BY " + order if order else ""), values)
 
     def refresh_all(self):
         self.project_map = {r["id"]: r["name"] for r in self.storage.rows("projects", "ORDER BY name")}
-        for tree in (self.project_tree, self.prompt_tree, self.tip_tree, self.code_tree): tree.delete(*tree.get_children())
-        for r in self.query_filter("projects", "ORDER BY updated_at DESC"):
-            self.project_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["status"], r["tool"] or "", r["github_repo"] or "", r["updated_at"]))
-        for r in self.query_filter("prompts", "ORDER BY favorite DESC, updated_at DESC"):
-            self.prompt_tree.insert("", "end", iid=str(r["id"]), values=("★" if r["favorite"] else "", r["name"], r["category"] or "", self.project_map.get(r["project_id"], ""), r["tool"] or "", r["tags"] or ""))
-        for r in self.query_filter("tips", "ORDER BY updated_at DESC"): self.tip_tree.insert("", "end", iid=str(r["id"]), values=(r["title"], r["category"] or "", r["when_to_use"] or ""))
-        for r in self.query_filter("codes", "ORDER BY updated_at DESC"): self.code_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["language"] or "", self.project_map.get(r["project_id"], ""), r["tags"] or ""))
+        for tree in (self.project_tree, self.prompt_tree, self.tip_tree, self.code_tree, self.file_tree): tree.delete(*tree.get_children())
+        for r in self.query("projects"): self.project_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["status"], r["tool"] or "", r["github_repo"] or ""))
+        for r in self.query("prompts", "favorite DESC, updated_at DESC"): self.prompt_tree.insert("", "end", iid=str(r["id"]), values=("★" if r["favorite"] else "", r["name"], r["category"] or "", self.project_map.get(r["project_id"], ""), r["tool"] or "", r["tags"] or ""))
+        for r in self.query("tips"): self.tip_tree.insert("", "end", iid=str(r["id"]), values=(r["title"], r["category"] or "", r["when_to_use"] or ""))
+        for r in self.query("codes"): self.code_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["language"] or "", self.project_map.get(r["project_id"], ""), r["tags"] or ""))
+        for r in self.query("files", "created_at DESC"): self.file_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["category"], r["extension"], self.human_size(r["size"]), r["created_at"]))
+        c = self.storage.counts(); self.metrics["prompts"].configure(text=str(c["prompts"])); self.metrics["files"].configure(text=str(c["files"])); self.metrics["favorites"].configure(text=str(self.storage.db.execute("SELECT COUNT(*) n FROM prompts WHERE favorite=1").fetchone()["n"])); self.metrics["categories"].configure(text=str(self.storage.db.execute("SELECT COUNT(DISTINCT category) n FROM prompts WHERE category IS NOT NULL AND category!=''").fetchone()["n"])); self.activity.configure(text=f"Última atualização: {now()}  •  {c['prompts']} prompts, {c['files']} arquivos")
 
-    def show_project_detail(self):
-        sel = self.project_tree.selection()
-        if not sel: return
-        r = self.storage.db.execute("SELECT * FROM projects WHERE id=?", (int(sel[0]),)).fetchone()
-        prompts = self.storage.db.execute("SELECT name FROM prompts WHERE project_id=? ORDER BY updated_at DESC", (r["id"],)).fetchall()
-        text = f"{r['name']} — {r['status']}\nObjetivo: {r['objective'] or '—'}\nFerramenta: {r['tool'] or '—'}\nRepositório: {r['github_repo'] or r['repo_link'] or '—'}\nÚltimo prompt: {r['last_prompt'] or '—'} | Última interação: {r['last_interaction'] or '—'}\nPrompts relacionados: {', '.join(x['name'] for x in prompts) or '—'}"
-        self.project_detail.configure(state="normal"); self.project_detail.delete("1.0", "end"); self.project_detail.insert("1.0", text); self.project_detail.configure(state="disabled")
+    @staticmethod
+    def human_size(size):
+        for unit in ("B", "KB", "MB", "GB"):
+            if size < 1024: return f"{size:.0f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+
+    def selected(self, tree): return int(tree.selection()[0]) if tree.selection() else None
+    def delete(self, tree, table):
+        rid = self.selected(tree)
+        if rid and messagebox.askyesno(APP_NAME, "Excluir o item selecionado? Esta ação não pode ser desfeita."): self.storage.db.execute(f"DELETE FROM {table} WHERE id=?", (rid,)); self.storage.db.commit(); self.refresh_all()
+    def favorite(self):
+        rid = self.selected(self.prompt_tree)
+        if rid: self.storage.db.execute("UPDATE prompts SET favorite=1-favorite,updated_at=? WHERE id=?", (now(), rid)); self.storage.db.commit(); self.refresh_all()
+    def copy_row(self, tree, table, field):
+        rid = self.selected(tree)
+        if rid:
+            row = self.storage.db.execute(f"SELECT {field} FROM {table} WHERE id=?", (rid,)).fetchone(); self.master.clipboard_clear(); self.master.clipboard_append(row[field]); messagebox.showinfo(APP_NAME, "Conteúdo copiado.")
+    def copy_prompt(self): self.copy_row(self.prompt_tree, "prompts", "content")
+    def copy_tip(self): self.copy_row(self.tip_tree, "tips", "content")
+    def copy_code(self): self.copy_row(self.code_tree, "codes", "content")
+    def show_favorites(self): self.tabs.select(self.prompts); self.search_var.set(""); self.refresh_all(); self.prompt_tree.focus_set()
 
     def form(self, title, fields, values=None):
-        win = tk.Toplevel(self); win.title(title); win.transient(self); win.grab_set(); win.geometry("620x560")
-        body = ttk.Frame(win, padding=16); body.pack(fill="both", expand=True); body.columnconfigure(1, weight=1); body.rowconfigure(len(fields)-1, weight=1)
+        if values is not None and not isinstance(values, dict): values = dict(values)
+        win = tk.Toplevel(self); win.title(title); win.transient(self); win.grab_set(); win.minsize(560, 420); win.geometry("720x620")
+        outer = ttk.Frame(win); outer.pack(fill="both", expand=True); canvas = tk.Canvas(outer, highlightthickness=0); scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview); inner = ttk.Frame(canvas, padding=18); inner.columnconfigure(1, weight=1); canvas.create_window((0, 0), window=inner, anchor="nw"); canvas.configure(yscrollcommand=scroll.set); canvas.pack(side="left", fill="both", expand=True); scroll.pack(side="right", fill="y"); inner.bind("<Configure>", lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
         widgets = {}
         for i, (key, label, kind, options) in enumerate(fields):
-            ttk.Label(body, text=label).grid(row=i, column=0, sticky="nw", padx=(0, 12), pady=6)
-            if kind == "combo": w = ttk.Combobox(body, values=options, state="readonly")
-            elif kind == "text": w = tk.Text(body, height=5, wrap="word")
-            else: w = ttk.Entry(body)
-            w.grid(row=i, column=1, sticky="nsew" if kind == "text" else "ew", pady=6); widgets[key] = w
+            ttk.Label(inner, text=label).grid(row=i, column=0, sticky="nw", padx=(0, 14), pady=6)
+            w = ttk.Combobox(inner, values=options, state="readonly") if kind == "combo" else tk.Text(inner, height=5, wrap="word") if kind == "text" else ttk.Entry(inner)
+            w.grid(row=i, column=1, sticky="ew", pady=6); widgets[key] = w
             if values and values.get(key) is not None:
                 val = str(values[key]); w.insert("1.0", val) if kind == "text" else w.set(val) if kind == "combo" else w.insert(0, val)
         result = {}
         def save():
             for key, w in widgets.items(): result[key] = w.get("1.0", "end-1c") if isinstance(w, tk.Text) else w.get()
-            if any(not str(result.get(k, "")).strip() for k, _, _, _ in fields[:1]): messagebox.showwarning(APP_NAME, "Preencha o nome ou título.", parent=win); return
+            if not result.get(fields[0][0], "").strip(): messagebox.showwarning(APP_NAME, "Preencha o campo principal.", parent=win); return
             win.destroy()
-        ttk.Button(body, text="Salvar", command=save).grid(row=len(fields), column=1, sticky="e", pady=12)
-        self.wait_window(win); return result or None
+        ttk.Button(inner, text="Salvar", command=save).grid(row=len(fields), column=1, sticky="e", pady=14); win.bind("<Escape>", lambda _: win.destroy()); self.wait_window(win); return result or None
 
-    def selected(self, tree):
-        sel = tree.selection(); return int(sel[0]) if sel else None
-
+    def project_fields(self): return [("name", "Nome", "entry", None), ("objective", "Objetivo", "text", None), ("github_repo", "Repositório GitHub", "entry", None), ("repo_link", "Link", "entry", None), ("tool", "Ferramenta", "entry", None), ("status", "Status", "combo", STATUSES), ("last_prompt", "Último prompt", "entry", None), ("last_interaction", "Última interação", "entry", None)]
     def edit_project(self):
-        rid = self.selected(self.project_tree); old = self.storage.db.execute("SELECT * FROM projects WHERE id=?", (rid,)).fetchone() if rid else None
-        fields = [("name", "Nome", "entry", None), ("objective", "Objetivo", "text", None), ("github_repo", "Repositório GitHub", "entry", None), ("repo_link", "Link do repositório", "entry", None), ("tool", "Ferramenta", "entry", None), ("status", "Status", "combo", STATUSES), ("last_prompt", "Último prompt usado", "entry", None), ("last_interaction", "Data da última interação", "entry", None)]
-        data = self.form("Projeto", fields, old)
+        rid = self.selected(self.project_tree); old = self.storage.db.execute("SELECT * FROM projects WHERE id=?", (rid,)).fetchone() if rid else None; data = self.form("Projeto", self.project_fields(), old)
         if data:
-            t = now()
-            if rid: self.storage.db.execute("UPDATE projects SET name=?, objective=?, github_repo=?, repo_link=?, tool=?, status=?, last_prompt=?, last_interaction=?, updated_at=? WHERE id=?", (*[data[x] for x, *_ in fields], t, rid))
-            else: self.storage.db.execute("INSERT INTO projects(name,objective,github_repo,repo_link,tool,status,last_prompt,last_interaction,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (*[data[x] for x, *_ in fields], t, t))
+            t=now(); vals=[data[k] for k,*_ in self.project_fields()]
+            if rid: self.storage.db.execute("UPDATE projects SET name=?,objective=?,github_repo=?,repo_link=?,tool=?,status=?,last_prompt=?,last_interaction=?,updated_at=? WHERE id=?", (*vals,t,rid))
+            else: self.storage.db.execute("INSERT INTO projects(name,objective,github_repo,repo_link,tool,status,last_prompt,last_interaction,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (*vals,t,t))
             self.storage.db.commit(); self.refresh_all()
-            if rid: self.project_tree.selection_set(str(rid))
-
+    def new_project(self): self.project_tree.selection_remove(self.project_tree.selection()); self.edit_project()
     def edit_prompt(self):
-        rid = self.selected(self.prompt_tree); old = self.storage.db.execute("SELECT * FROM prompts WHERE id=?", (rid,)).fetchone() if rid else None
-        project_values = ["(Sem projeto)"] + list(self.project_map.values()); fields = [("name", "Nome", "entry", None), ("category", "Categoria", "entry", None), ("project_name", "Projeto relacionado", "combo", project_values), ("tool", "Ferramenta", "combo", PROMPT_TOOLS), ("objective", "Objetivo", "entry", None), ("trigger", "Gatilho", "entry", None), ("when_to_use", "Quando usar", "text", None), ("content", "Prompt completo", "text", None), ("expected_result", "Resultado esperado", "text", None), ("notes", "Observações", "text", None), ("tags", "Tags", "entry", None)]
-        vals = dict(old) if old else {}; vals["project_name"] = self.project_map.get(vals.get("project_id"), "(Sem projeto)")
-        data = self.form("Prompt", fields, vals)
+        rid=self.selected(self.prompt_tree); old=self.storage.db.execute("SELECT * FROM prompts WHERE id=?",(rid,)).fetchone() if rid else None; fields=[("name","Nome","entry",None),("category","Categoria","entry",None),("project_name","Projeto","combo",["(Sem projeto)"]+list(self.project_map.values())),("tool","Ferramenta","combo",PROMPT_TOOLS),("objective","Objetivo","entry",None),("trigger","Gatilho","entry",None),("when_to_use","Quando usar","text",None),("content","Prompt completo","text",None),("expected_result","Resultado esperado","text",None),("notes","Observações","text",None),("tags","Tags","entry",None)]; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); data=self.form("Prompt",fields,vals)
         if data:
-            pid = next((k for k,v in self.project_map.items() if v == data["project_name"]), None); t=now(); args=[data[x] for x, *_ in fields if x != "project_name"]
-            if rid: self.storage.db.execute("UPDATE prompts SET name=?,category=?,project_id=?,tool=?,objective=?,trigger=?,when_to_use=?,content=?,expected_result=?,notes=?,tags=?,updated_at=? WHERE id=?", (data["name"],data["category"],pid,data["tool"],data["objective"],data["trigger"],data["when_to_use"],data["content"],data["expected_result"],data["notes"],data["tags"],t,rid))
-            else: self.storage.db.execute("INSERT INTO prompts(name,category,project_id,tool,objective,trigger,when_to_use,content,expected_result,notes,tags,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (data["name"],data["category"],pid,data["tool"],data["objective"],data["trigger"],data["when_to_use"],data["content"],data["expected_result"],data["notes"],data["tags"],t,t))
-            self.storage.db.commit(); self.refresh_all()
-
+            pid=next((k for k,v in self.project_map.items() if v==data["project_name"]),None); t=now(); args=(data["name"],data["category"],pid,data["tool"],data["objective"],data["trigger"],data["when_to_use"],data["content"],data["expected_result"],data["notes"],data["tags"])
+            if rid:self.storage.db.execute("UPDATE prompts SET name=?,category=?,project_id=?,tool=?,objective=?,trigger=?,when_to_use=?,content=?,expected_result=?,notes=?,tags=?,updated_at=? WHERE id=?",(*args,t,rid))
+            else:self.storage.db.execute("INSERT INTO prompts(name,category,project_id,tool,objective,trigger,when_to_use,content,expected_result,notes,tags,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",(*args,t,t))
+            self.storage.db.commit();self.refresh_all()
+    def new_prompt(self): self.prompt_tree.selection_remove(self.prompt_tree.selection()); self.edit_prompt()
     def edit_tip(self):
-        rid=self.selected(self.tip_tree); old=self.storage.db.execute("SELECT * FROM tips WHERE id=?",(rid,)).fetchone() if rid else None; fields=[("title","Título","entry",None),("category","Categoria","combo",TIP_CATEGORIES),("when_to_use","Quando usar","text",None),("explanation","Explicação curta","text",None),("content","Prompt copiável","text",None)]; data=self.form("Dica de Prompt",fields,old)
+        rid=self.selected(self.tip_tree); old=self.storage.db.execute("SELECT * FROM tips WHERE id=?",(rid,)).fetchone() if rid else None; fields=[("title","Título","entry",None),("category","Categoria","combo",TIP_CATEGORIES),("when_to_use","Quando usar","text",None),("explanation","Explicação","text",None),("content","Prompt copiável","text",None)]; data=self.form("Dica",fields,old)
         if data:
-            t=now(); vals=[data[x] for x,*_ in fields]
+            t=now(); vals=[data[k] for k,*_ in fields]
             if rid:self.storage.db.execute("UPDATE tips SET title=?,category=?,when_to_use=?,explanation=?,content=?,updated_at=? WHERE id=?",(*vals,t,rid))
             else:self.storage.db.execute("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",(*vals,t,t))
             self.storage.db.commit();self.refresh_all()
-
+    def new_tip(self): self.tip_tree.selection_remove(self.tip_tree.selection()); self.edit_tip()
     def edit_code(self):
-        rid=self.selected(self.code_tree); old=self.storage.db.execute("SELECT * FROM codes WHERE id=?",(rid,)).fetchone() if rid else None; fields=[("name","Nome","entry",None),("language","Linguagem","entry",None),("project_name","Projeto relacionado","combo",["(Sem projeto)"]+list(self.project_map.values())),("purpose","Finalidade","text",None),("content","Código","text",None),("tags","Tags","entry",None),("notes","Observações","text",None)]; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); data=self.form("Código técnico",fields,vals)
+        rid=self.selected(self.code_tree); old=self.storage.db.execute("SELECT * FROM codes WHERE id=?",(rid,)).fetchone() if rid else None; fields=[("name","Nome","entry",None),("language","Linguagem","entry",None),("project_name","Projeto","combo",["(Sem projeto)"]+list(self.project_map.values())),("purpose","Finalidade","text",None),("content","Código","text",None),("tags","Tags","entry",None),("notes","Observações","text",None)]; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); data=self.form("Código",fields,vals)
         if data:
-            pid=next((k for k,v in self.project_map.items() if v==data["project_name"]),None);t=now();args=(data["name"],data["language"],pid,data["purpose"],data["content"],data["tags"],data["notes"])
+            pid=next((k for k,v in self.project_map.items() if v==data["project_name"]),None); t=now(); args=(data["name"],data["language"],pid,data["purpose"],data["content"],data["tags"],data["notes"])
             if rid:self.storage.db.execute("UPDATE codes SET name=?,language=?,project_id=?,purpose=?,content=?,tags=?,notes=?,updated_at=? WHERE id=?",(*args,t,rid))
             else:self.storage.db.execute("INSERT INTO codes(name,language,project_id,purpose,content,tags,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(*args,t,t))
             self.storage.db.commit();self.refresh_all()
+    def new_code(self): self.code_tree.selection_remove(self.code_tree.selection()); self.edit_code()
 
+    def upload_file(self):
+        source=filedialog.askopenfilename(filetypes=[("Arquivos aceitos", "*.pdf *.docx *.xlsx *.pptx *.txt *.zip *.png *.jpg *.jpeg")]);
+        if not source: return
+        src=Path(source); ext=src.suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS: messagebox.showerror(APP_NAME,"Tipo de arquivo não permitido."); return
+        category=simpledialog.askstring(APP_NAME,"Categoria (Templates, Documentações, Referências ou Arquivos Gerais):",initialvalue="Arquivos Gerais") or "Arquivos Gerais"
+        if category not in FILE_CATEGORIES: category="Arquivos Gerais"
+        stored=f"{secrets.token_hex(12)}{ext}"; target=self.storage.file_dir/stored; shutil.copy2(src,target); self.storage.db.execute("INSERT INTO files(name,stored_name,extension,category,size,sha256,created_at) VALUES(?,?,?,?,?,?,?)",(src.name,stored,ext,category,target.stat().st_size,sha256_file(target),now())); self.storage.db.commit(); self.refresh_all()
+    def file_info(self):
+        rid=self.selected(self.file_tree)
+        if rid:
+            r=self.storage.db.execute("SELECT * FROM files WHERE id=?",(rid,)).fetchone(); messagebox.showinfo(APP_NAME,f"{r['name']}\nTipo: {r['extension']}\nCategoria: {r['category']}\nTamanho: {self.human_size(r['size'])}\nSHA-256: {r['sha256']}")
+    def download_file(self):
+        rid=self.selected(self.file_tree)
+        if not rid:return
+        r=self.storage.db.execute("SELECT * FROM files WHERE id=?",(rid,)).fetchone(); path=filedialog.asksaveasfilename(initialfile=r["name"]);
+        if path: shutil.copy2(self.storage.file_dir/r["stored_name"],path); self.storage.db.execute("UPDATE files SET accessed_at=? WHERE id=?",(now(),rid)); self.storage.db.commit()
+    def delete_file(self):
+        rid=self.selected(self.file_tree)
+        if not rid or not messagebox.askyesno(APP_NAME,"Excluir arquivo e registro? Esta ação não pode ser desfeita."):return
+        r=self.storage.db.execute("SELECT stored_name FROM files WHERE id=?",(rid,)).fetchone(); (self.storage.file_dir/r["stored_name"]).unlink(missing_ok=True); self.storage.db.execute("DELETE FROM files WHERE id=?",(rid,)); self.storage.db.commit(); self.refresh_all()
+
+    def configure_email(self):
+        email=simpledialog.askstring(APP_NAME,"E-mail usado para recuperação local:",initialvalue=self.storage.setting("email", ""),parent=self)
+        if email is not None:self.storage.set_setting("email",email.strip()); messagebox.showinfo(APP_NAME,"E-mail salvo localmente. Nenhuma mensagem é enviada sem configurar um provedor externo.")
+    def change_password(self):
+        current=simpledialog.askstring(APP_NAME,"Senha atual:",show="•",parent=self); new=simpledialog.askstring(APP_NAME,"Nova senha:",show="•",parent=self) if current and verify_password(current,self.storage.setting("password_hash","")) else None
+        if new and len(new)>=6:self.storage.set_setting("password_hash",hash_password(new)); messagebox.showinfo(APP_NAME,"Senha alterada.")
+        elif current: messagebox.showerror(APP_NAME,"Senha atual inválida ou nova senha muito curta.")
     def export_backup(self):
         path=filedialog.asksaveasfilename(defaultextension=".json",filetypes=[("Backup JSON","*.json")]);
         if not path:return
-        data={};
-        for table in ("settings","projects","prompts","tips","codes"):data[table]=[dict(x) for x in self.storage.rows(table)]
-        Path(path).write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8"); messagebox.showinfo(APP_NAME,"Backup exportado com sucesso.")
-
+        payload={"version":2,"exported_at":now(),"settings":[dict(r) for r in self.storage.db.execute("SELECT * FROM settings")],"projects":[dict(r) for r in self.storage.rows("projects")],"prompts":[dict(r) for r in self.storage.rows("prompts")],"tips":[dict(r) for r in self.storage.rows("tips")],"codes":[dict(r) for r in self.storage.rows("codes")],"files":[dict(r) for r in self.storage.rows("files")]}; Path(path).write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding="utf-8"); messagebox.showinfo(APP_NAME,"Backup exportado.")
     def import_backup(self):
         path=filedialog.askopenfilename(filetypes=[("Backup JSON","*.json")]);
         if not path:return
         try:
-            data=json.loads(Path(path).read_text(encoding="utf-8"));
-            if not messagebox.askyesno(APP_NAME,"Importar este backup adicionará registros aos dados atuais. Continuar?"):return
-            for table in ("projects","prompts","tips","codes"):
-                cols=[k for k in (data.get(table) or [{}])[0].keys() if k != "id"] if data.get(table) else []
-                for row in data.get(table,[]):
-                    if cols:self.storage.db.execute(f"INSERT INTO {table}({','.join(cols)}) VALUES({','.join('?' for _ in cols)})",[row.get(c) for c in cols])
-            self.storage.db.commit();self.refresh_all();messagebox.showinfo(APP_NAME,"Backup importado.")
-        except Exception as exc:messagebox.showerror(APP_NAME,f"Não foi possível importar: {exc}")
-
-    def change_password(self):
-        current=simpledialog.askstring(APP_NAME,"Senha atual:",show="•",parent=self); 
-        if not current or not verify_password(current,self.storage.setting("password_hash","")):messagebox.showerror(APP_NAME,"Senha atual inválida.");return
-        new=simpledialog.askstring(APP_NAME,"Nova senha (mínimo 6 caracteres):",show="•",parent=self)
-        if new and len(new)>=6:self.storage.set_setting("password_hash",hash_password(new));messagebox.showinfo(APP_NAME,"Senha alterada.")
+            payload=json.loads(Path(path).read_text(encoding="utf-8")); required={"projects","prompts","tips","codes"};
+            if not required.issubset(payload):raise ValueError("Formato de backup incompatível")
+            if not messagebox.askyesno(APP_NAME,"Os registros serão adicionados em uma transação segura. Continuar?"):return
+            self.storage.db.execute("BEGIN")
+            project_ids={}
+            for row in payload.get("projects",[]):
+                cur=self.storage.db.execute("INSERT INTO projects(name,objective,github_repo,repo_link,tool,status,last_prompt,last_interaction,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",tuple(row.get(k) or "" for k in ("name","objective","github_repo","repo_link","tool","status","last_prompt","last_interaction","created_at","updated_at"))); project_ids[row.get("id")]=cur.lastrowid
+            for row in payload.get("prompts",[]):
+                self.storage.db.execute("INSERT INTO prompts(name,category,project_id,tool,objective,trigger,when_to_use,content,expected_result,notes,tags,favorite,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(row.get("name",""),row.get("category",""),project_ids.get(row.get("project_id")),row.get("tool",""),row.get("objective",""),row.get("trigger",""),row.get("when_to_use",""),row.get("content",""),row.get("expected_result",""),row.get("notes",""),row.get("tags",""),int(row.get("favorite",0)),row.get("created_at",now()),row.get("updated_at",now())))
+            for table, cols in (("tips",("title","category","when_to_use","explanation","content","created_at","updated_at")), ("codes",("name","language","project_id","purpose","content","tags","notes","created_at","updated_at"))):
+                for row in payload.get(table,[]):
+                    vals=[project_ids.get(row.get("project_id")) if c=="project_id" else row.get(c,"") for c in cols]; self.storage.db.execute(f"INSERT INTO {table}({','.join(cols)}) VALUES({','.join('?' for _ in cols)})",vals)
+            self.storage.db.commit(); self.refresh_all(); messagebox.showinfo(APP_NAME,"Backup importado sem alterar os dados anteriores.")
+        except Exception as exc:
+            self.storage.db.rollback(); messagebox.showerror(APP_NAME,f"Importação cancelada e revertida: {exc}")
+    def about(self): messagebox.showinfo(APP_NAME,"Biblioteca de Prompts\n\nAplicação local para preservar contexto, prompts, projetos e materiais técnicos. Dados mantidos no dispositivo, sem IA embutida nem dependência de internet em tempo de execução.")
 
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1120x720"); self.minsize(900,600)
-        style=ttk.Style(self); style.theme_use("clam"); style.configure("Title.TLabel",font=("Segoe UI",20,"bold"),foreground="#17324d"); style.configure("Subtitle.TLabel",font=("Segoe UI",10),foreground="#52606d"); style.configure("Section.TLabel",font=("Segoe UI",15,"bold"),foreground="#17324d")
-        self.protocol("WM_DELETE_WINDOW",self.quit_app); self.show_login()
+        super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1200x780"); self.minsize(760,520); self.configure(bg="#070317"); style=ttk.Style(self); style.theme_use("clam"); style.configure(".", background="#0B0820", foreground="#E2E8F0"); style.configure("TFrame", background="#0B0820"); style.configure("TLabel", background="#0B0820", foreground="#E2E8F0"); style.configure("TButton", padding=(10,6)); style.configure("Title.TLabel", font=("Segoe UI",20,"bold"), foreground="#FF4FD8"); style.configure("Section.TLabel", font=("Segoe UI",15,"bold"), foreground="#00E5FF"); style.configure("Subtitle.TLabel", foreground="#94A3B8"); style.configure("Muted.TLabel", foreground="#94A3B8", wraplength=760); style.configure("Metric.TLabel", font=("Segoe UI",24,"bold"), foreground="#FF4FD8"); style.configure("Link.TButton", foreground="#00E5FF"); self.protocol("WM_DELETE_WINDOW",self.quit_app); self.show_login()
     def clear(self):
-        for w in self.winfo_children():w.destroy()
-    def show_login(self):self.clear(); LoginFrame(self,self.login).pack(fill="both",expand=True)
-    def login(self,user):self.clear();MainApp(self,user,self.show_login).pack(fill="both",expand=True)
-    def quit_app(self):self.storage.close();self.destroy()
+        for w in self.winfo_children(): w.destroy()
+    def show_login(self): self.clear(); LoginFrame(self,self.login).pack(fill="both",expand=True)
+    def login(self,user): self.clear(); MainApp(self,user,self.show_login).pack(fill="both",expand=True)
+    def quit_app(self): self.storage.close(); self.destroy()
 
-if __name__ == "__main__":
-    App().mainloop()
+if __name__ == "__main__": App().mainloop()

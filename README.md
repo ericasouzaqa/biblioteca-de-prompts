@@ -1,44 +1,64 @@
-# Central de Prompts
+# Biblioteca de Prompts Erica QA
 
-Aplicativo desktop offline para organizar projetos, prompts reutilizáveis, dicas de continuidade e códigos técnicos úteis. A aplicação não possui IA embutida, não exige internet e não depende de APIs externas em tempo de execução.
+Aplicação desktop local para preservar contexto entre projetos e ferramentas de IA. Organiza prompts, projetos, dicas, códigos técnicos e materiais relacionados em um banco SQLite persistente, com autenticação local e funcionamento sem internet em tempo de execução.
 
-## Requisitos
-
-Python 3.10 ou superior com Tkinter instalado. Em distribuições Debian/Ubuntu, caso necessário, instale `python3-tk` pelo gerenciador de pacotes do sistema.
+> Os dados pessoais e o banco local não pertencem ao repositório. Eles ficam em `~/.central-de-prompts/` e são excluídos do versionamento pelo `.gitignore`.
 
 ## Download para Windows
 
-A versão Windows é um pacote **portátil** publicado em [Releases](https://github.com/ericasouzaqa/central-de-prompts/releases/latest). Você não precisa instalar Python, Tkinter, bibliotecas, DLLs, runtime ou qualquer outro programa.
+A versão Windows é distribuída como executável portátil em [Releases](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest). Baixe o ZIP, extraia e abra `CentralDePrompts.exe` com duplo clique. O pacote já contém Python, SQLite, Tkinter e as DLLs necessárias; não é preciso instalar terminal, Python ou bibliotecas.
 
-Baixe `CentralDePrompts-Windows.zip`, extraia o arquivo em qualquer pasta e abra `CentralDePrompts.exe` com duplo clique. O executável já contém o runtime Python, o SQLite e os componentes gráficos necessários. Não é necessário abrir o terminal, executar comandos ou manter internet conectada.
+## Funcionalidades
 
-O Windows pode exibir um aviso do SmartScreen por o executável ser novo e não possuir assinatura digital comercial. Nesse caso, confirme que o arquivo foi baixado deste repositório privado e escolha **Mais informações > Executar assim mesmo**, se desejar prosseguir.
+A aplicação possui um dashboard com métricas de prompts, favoritos, categorias e arquivos, além de atalhos para criação, favoritos, repositório e configurações. A biblioteca mantém projetos, prompts, dicas e códigos com criação, edição, exclusão, favoritos, cópia, tags, categorias e busca global.
 
-## Execução a partir do código-fonte (opcional)
+O módulo **Repositório** permite importar, pesquisar, filtrar por categoria e baixar arquivos PDF, DOCX, XLSX, PPTX, TXT, ZIP, PNG, JPG e JPEG. Os arquivos são armazenados localmente com nome interno aleatório e hash SHA-256 para verificação de integridade.
 
-A seção abaixo é destinada somente a quem quiser editar ou desenvolver o projeto. Para uso normal no Windows, utilize exclusivamente o executável portátil descrito acima.
+A autenticação local mantém o hash da senha com `scrypt`. O fluxo **Esqueci minha senha** usa um token temporário, de uso único e com validade de 20 minutos. No modo offline, o token é exibido localmente. Uma integração real de e-mail pode ser adicionada posteriormente sem alterar o banco existente.
 
+## Recuperação e preservação de dados
+
+As atualizações criam uma cópia `central.db.before-update` antes de alterações estruturais. A importação de backup valida o formato, preserva os registros existentes, remapeia IDs de projetos relacionados e executa a operação em transação com rollback em caso de falha. A exportação inclui configurações, projetos, prompts, dicas, códigos e metadados do repositório.
+
+## Execução a partir do código-fonte
+
+Requer Python 3.10 ou superior e Tkinter. No Ubuntu/Debian, se necessário, instale `python3-tk` pelo gerenciador de pacotes. Depois execute:
 
 ```bash
 python3 app.py
 ```
 
-No primeiro acesso, informe um nome de usuário e crie uma senha com pelo menos seis caracteres. A senha é armazenada somente como um hash `scrypt`; os dados ficam no banco SQLite local em `~/.central-de-prompts/central.db`.
+Para validar a implementação:
 
-## Sobre a aplicação
+```bash
+python3 -m py_compile app.py
+python3 test_storage.py
+xvfb-run -a python3 test_gui.py
+```
 
-A Central de Prompts é uma biblioteca pessoal privada para preservar contexto entre projetos e ferramentas de IA. Ela foi desenhada para funcionar localmente, sem IA embutida, sem APIs externas, sem conta Manus e sem dependência de internet em tempo de execução.
+## Estrutura
 
-## Recursos implementados
+| Caminho | Responsabilidade |
+|---|---|
+| `app.py` | Interface Tkinter, autenticação, persistência, dashboard, biblioteca e repositório |
+| `test_storage.py` | Testes isolados de SQLite, hash e recuperação de senha |
+| `test_gui.py` | Smoke test de inicialização da interface em display virtual |
+| `docs/index.html` | Página pública responsiva do projeto para GitHub Pages |
+| `.github/workflows/windows-build.yml` | Build portátil Windows via PyInstaller e publicação de release |
+| `AUDIT_FINDINGS.md` | Auditoria arquitetural, riscos e estratégia de atualização |
 
-A janela principal possui as abas **Projetos**, **Biblioteca de Prompts**, **Dicas de Prompt**, **Biblioteca de Códigos** e **Configurações**, além de pesquisa global por texto. Projetos mantêm objetivo, repositório, ferramenta, status, último prompt e data de interação. Prompts possuem campos de contexto, gatilho, conteúdo completo, resultado esperado, observações e tags. Dicas e códigos também podem ser cadastrados, editados e pesquisados.
+## GitHub Pages
 
-A aba de configurações permite exportar e importar backups JSON, alterar a senha e consultar a pasta local de dados. O logout encerra apenas a sessão e não remove informações.
+A aplicação principal é desktop e depende de SQLite local, portanto não pode ser executada diretamente em GitHub Pages sem perder privacidade e persistência. Como alternativa compatível, `docs/index.html` fornece uma página pública responsiva de apresentação e download. O aplicativo continua sendo a fonte de dados e de funcionalidades completas.
 
-## Princípio de independência
+## Desenvolvimento e publicação
 
-Este projeto utiliza apenas a biblioteca padrão do Python e SQLite. Não contém chaves, tokens, dados pessoais ou dependências obrigatórias do Manus, GitHub, IA ou serviços externos.
+O workflow `Build Windows` é executado em tags `v*`. Ele gera `CentralDePrompts.exe`, cria `CentralDePrompts-Windows.zip`, publica os artefatos e mantém o executável independente de serviços externos durante o uso.
 
-## Observação de segurança
+## Identidade visual
 
-A proteção atual cobre autenticação local, hash de senha e permissões restritas da pasta de dados. Para ambientes com exigência de criptografia de disco ou ameaça física ao computador, recomenda-se também utilizar a criptografia nativa do sistema operacional.
+A interface utiliza a direção visual futurista solicitada: fundo escuro em tons `#070317`, `#0B0820` e `#120B2E`, acentos rosa neon `#FF4FD8`, roxo `#9B4DFF`, ciano `#00E5FF`, cards arredondados, foco visível e contraste reforçado. As imagens de referência citadas na especificação não estavam presentes no repositório no momento da auditoria; por isso a implementação usa a paleta e o sistema visual sem inventar arquivos pessoais.
+
+## Limites conhecidos
+
+A recuperação de senha offline não envia e-mails por não haver provedor configurado. O GitHub Pages é uma landing page, não uma réplica da biblioteca privada. A sincronização entre dispositivos e o envio de e-mail exigiriam um serviço externo opcional, ausente por decisão de independência operacional.
