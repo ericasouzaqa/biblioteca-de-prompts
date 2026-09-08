@@ -6,7 +6,7 @@ Aplicação desktop local para preservar contexto entre projetos e ferramentas d
 
 ## Download para Windows
 
-A versão Windows é distribuída como executável portátil em [Releases](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest). Baixe o ZIP, extraia e abra `CentralDePrompts.exe` com duplo clique. O pacote já contém Python, SQLite, Tkinter e as DLLs necessárias; não é preciso instalar terminal, Python ou bibliotecas.
+A versão Windows é distribuída como executável portátil em [Releases](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest). Baixe o ZIP, extraia e abra `BibliotecaDePrompts.exe` com duplo clique. O pacote já contém Python, SQLite, Tkinter e as DLLs necessárias; não é preciso instalar terminal, Python ou bibliotecas.
 
 ## Funcionalidades
 
@@ -47,13 +47,19 @@ xvfb-run -a python3 test_gui.py
 | `.github/workflows/windows-build.yml` | Build portátil Windows via PyInstaller e publicação de release |
 | `AUDIT_FINDINGS.md` | Auditoria arquitetural, riscos e estratégia de atualização |
 
+## Links de distribuição
+
+- **GitHub Pages:** https://ericasouzaqa.github.io/biblioteca-de-prompts/
+- **Release mais recente:** https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest
+- **Executável Windows:** disponível como `BibliotecaDePrompts-Windows.zip` na Release mais recente
+
 ## GitHub Pages
 
 A aplicação principal é desktop e depende de SQLite local, portanto não pode ser executada diretamente em GitHub Pages sem perder privacidade e persistência. Como alternativa compatível, `docs/index.html` fornece uma página pública responsiva de apresentação e download. O aplicativo continua sendo a fonte de dados e de funcionalidades completas.
 
 ## Desenvolvimento e publicação
 
-O workflow `Build Windows` é executado em tags `v*`. Ele gera `CentralDePrompts.exe`, cria `CentralDePrompts-Windows.zip`, publica os artefatos e mantém o executável independente de serviços externos durante o uso.
+O workflow `Build Windows` é executado em tags `v*`. Ele gera `BibliotecaDePrompts.exe`, cria `BibliotecaDePrompts-Windows.zip`, publica os artefatos e mantém o executável independente de serviços externos durante o uso.
 
 ## Identidade visual
 
@@ -62,3 +68,11 @@ A interface utiliza a direção visual futurista solicitada: fundo escuro em ton
 ## Limites conhecidos
 
 A recuperação de senha offline não envia e-mails por não haver provedor configurado. O GitHub Pages é uma landing page, não uma réplica da biblioteca privada. A sincronização entre dispositivos e o envio de e-mail exigiriam um serviço externo opcional, ausente por decisão de independência operacional.
+
+## Instalação no Windows
+
+1. Baixe `BibliotecaDePrompts-Windows.zip` na [Release mais recente](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest).
+2. Extraia o ZIP para uma pasta de sua preferência.
+3. Execute `BibliotecaDePrompts.exe`. O banco local será criado em `%USERPROFILE%\.central-de-prompts`.
+
+O executável é portátil: não exige Python instalado nem conexão com a internet durante o uso.

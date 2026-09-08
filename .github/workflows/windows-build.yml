@@ -25,25 +25,30 @@ jobs:
         shell: pwsh
         run: python -m pip install --upgrade pip pyinstaller
 
+      - name: Prepare application icon
+        shell: pwsh
+        run: |
+          python -m pip install pillow
+          python -c "from PIL import Image,ImageDraw; im=Image.new('RGBA',(256,256),(7,3,23,255)); d=ImageDraw.Draw(im); d.rounded_rectangle((28,28,228,228), radius=45, outline=(255,79,216,255), width=12); d.line((128,70,128,185), fill=(0,229,255,255), width=10); d.arc((45,55,145,205), 250, 110, fill=(155,77,255,255), width=10); d.arc((111,55,211,205), 70, 290, fill=(0,229,255,255), width=10); im.save('favicon.ico')"
       - name: Build portable executable
         shell: pwsh
-        run: pyinstaller --clean --noconfirm --onefile --windowed --name CentralDePrompts app.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --name BibliotecaDePrompts --icon=favicon.ico app.py
 
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path dist/CentralDePrompts.exe -DestinationPath CentralDePrompts-Windows.zip
+        run: Compress-Archive -Path dist/BibliotecaDePrompts.exe -DestinationPath BibliotecaDePrompts-Windows.zip
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CentralDePrompts-Windows
+          name: BibliotecaDePrompts-Windows
           path: |
-            CentralDePrompts-Windows.zip
-            dist/CentralDePrompts.exe
+            BibliotecaDePrompts-Windows.zip
+            dist/BibliotecaDePrompts.exe
 
       - name: Publish release asset for version tags
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" CentralDePrompts-Windows.zip dist/CentralDePrompts.exe --title "Central de Prompts ${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" BibliotecaDePrompts-Windows.zip dist/BibliotecaDePrompts.exe --title "Biblioteca de Prompts ${GITHUB_REF_NAME}" --generate-notes

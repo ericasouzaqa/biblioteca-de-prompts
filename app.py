@@ -8,11 +8,19 @@ import shutil
 import sqlite3
 import tempfile
 import tkinter as tk
+from tkinter import font as tkfont
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_NAME = "Biblioteca de Prompts"
+BRAND_TAGLINE = "Conhecimento organizado para criar melhor com IA"
+PALETTE = {
+    "bg": "#070317", "surface": "#100A26", "surface_raised": "#181039",
+    "border": "#3A2866", "text": "#FFFFFF", "muted": "#CBD5E1",
+    "pink": "#FF4FD8", "magenta": "#E535C7", "purple": "#9B4DFF",
+    "violet": "#7C3AED", "cyan": "#00E5FF", "success": "#6EE7B7",
+}
 APP_DIR = Path.home() / ".central-de-prompts"
 DB_PATH = APP_DIR / "central.db"
 FILE_DIR = APP_DIR / "files"
@@ -125,16 +133,21 @@ class Storage:
 
 class LoginFrame(ttk.Frame):
     def __init__(self, master, on_login):
-        super().__init__(master, padding=32); self.master = master; self.storage = master.storage; self.on_login = on_login; self.columnconfigure(0, weight=1)
-        ttk.Label(self, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=0, pady=(28, 4)); ttk.Label(self, text="Seu contexto, organizado e privado", style="Subtitle.TLabel").grid(row=1, column=0, pady=(0, 24))
-        box = ttk.LabelFrame(self, text="Acesso privado", padding=18); box.grid(row=2, column=0, sticky="ew"); box.columnconfigure(1, weight=1)
-        self.user = self.field(box, 0, "Usuário"); self.password = self.field(box, 1, "Senha", True)
-        ttk.Button(box, text="Entrar", command=self.submit).grid(row=2, column=1, sticky="e", pady=(14, 4)); self.password.bind("<Return>", lambda _: self.submit())
-        ttk.Button(self, text="Esqueci minha senha", style="Link.TButton", command=self.recover).grid(row=3, column=0, pady=12)
-        if not self.storage.setting("username"): ttk.Label(self, text="Primeiro acesso: informe um usuário e uma senha com pelo menos 6 caracteres.", style="Muted.TLabel").grid(row=4, column=0)
+        super().__init__(master, padding=(28, 22)); self.master = master; self.storage = master.storage; self.on_login = on_login; self.columnconfigure(0, weight=1); self.rowconfigure(0, weight=1)
+        shell = ttk.Frame(self, style="LoginShell.TFrame", padding=(34, 30)); shell.grid(row=0, column=0, sticky="nsew", padx=14, pady=14); shell.columnconfigure(0, weight=1)
+        ttk.Label(shell, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, pady=(0, 4))
+        ttk.Label(shell, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=1, column=0, pady=(0, 5))
+        ttk.Label(shell, text=BRAND_TAGLINE, style="Subtitle.TLabel").grid(row=2, column=0, pady=(0, 24))
+        box = ttk.LabelFrame(shell, text="  ACESSO PRIVADO  ", style="LoginBox.TLabelframe", padding=(22, 18)); box.grid(row=3, column=0, sticky="ew", padx=10); box.columnconfigure(0, weight=1)
+        ttk.Label(box, text="Entre para acessar sua biblioteca local.", style="Muted.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 14))
+        self.user = self.field(box, 1, "Usuário"); self.password = self.field(box, 3, "Senha", True)
+        ttk.Button(box, text="Entrar  →", style="Primary.TButton", command=self.submit).grid(row=4, column=0, sticky="ew", pady=(18, 4)); self.password.bind("<Return>", lambda _: self.submit())
+        ttk.Button(shell, text="Esqueci minha senha", style="Link.TButton", command=self.recover).grid(row=4, column=0, pady=(14, 4))
+        if not self.storage.setting("username"): ttk.Label(shell, text="Primeiro acesso: crie um usuário e uma senha com pelo menos 6 caracteres.", style="Muted.TLabel").grid(row=5, column=0, pady=(8, 0))
+        ttk.Label(shell, text="OFFLINE • SEUS DADOS FICAM NESTE DISPOSITIVO", style="Security.TLabel").grid(row=6, column=0, pady=(25, 0))
 
     def field(self, parent, row, label, secret=False):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=6); entry = ttk.Entry(parent, show="•" if secret else ""); entry.grid(row=row, column=1, sticky="ew", pady=6); return entry
+        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(row=row, column=0, sticky="w", pady=(0, 5)); entry = ttk.Entry(parent, show="•" if secret else "", style="Auth.TEntry"); entry.grid(row=row + 1, column=0, sticky="ew"); return entry
 
     def submit(self):
         user, password = self.user.get().strip(), self.password.get(); stored = self.storage.setting("username")
@@ -355,7 +368,12 @@ class MainApp(ttk.Frame):
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1200x780"); self.minsize(760,520); self.configure(bg="#070317"); style=ttk.Style(self); style.theme_use("clam"); style.configure(".", background="#0B0820", foreground="#E2E8F0"); style.configure("TFrame", background="#0B0820"); style.configure("TLabel", background="#0B0820", foreground="#E2E8F0"); style.configure("TButton", padding=(10,6)); style.configure("Title.TLabel", font=("Segoe UI",20,"bold"), foreground="#FF4FD8"); style.configure("Section.TLabel", font=("Segoe UI",15,"bold"), foreground="#00E5FF"); style.configure("Subtitle.TLabel", foreground="#94A3B8"); style.configure("Muted.TLabel", foreground="#94A3B8", wraplength=760); style.configure("Metric.TLabel", font=("Segoe UI",24,"bold"), foreground="#FF4FD8"); style.configure("Link.TButton", foreground="#00E5FF"); self.protocol("WM_DELETE_WINDOW",self.quit_app); self.show_login()
+        super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1200x780"); self.minsize(760,520); self.configure(bg=PALETTE["bg"]); style=ttk.Style(self); style.theme_use("clam")
+        style.configure(".", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 10)); style.configure("TFrame", background=PALETTE["surface"]); style.configure("LoginShell.TFrame", background=PALETTE["bg"]); style.configure("TLabel", background=PALETTE["surface"], foreground=PALETTE["text"]); style.configure("TButton", padding=(12, 8), foreground=PALETTE["text"], background=PALETTE["surface_raised"], bordercolor=PALETTE["border"]); style.map("TButton", background=[("active", PALETTE["violet"]), ("pressed", PALETTE["purple"])], foreground=[("disabled", "#64748B")]); style.configure("Primary.TButton", background=PALETTE["magenta"], foreground=PALETTE["text"], font=("Segoe UI", 11, "bold")); style.map("Primary.TButton", background=[("active", PALETTE["pink"]), ("pressed", PALETTE["violet"])])
+        style.configure("Title.TLabel", font=("Segoe UI",20,"bold"), foreground=PALETTE["pink"]); style.configure("BrandMark.TLabel", font=("Segoe UI Symbol", 44), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("Section.TLabel", font=("Segoe UI",15,"bold"), foreground=PALETTE["cyan"]); style.configure("Subtitle.TLabel", foreground=PALETTE["muted"]); style.configure("Muted.TLabel", foreground=PALETTE["muted"], wraplength=760); style.configure("Security.TLabel", font=("Segoe UI", 8, "bold"), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("FieldLabel.TLabel", foreground=PALETTE["text"], font=("Segoe UI", 10, "bold")); style.configure("Metric.TLabel", font=("Segoe UI",24,"bold"), foreground=PALETTE["pink"]); style.configure("Link.TButton", foreground=PALETTE["cyan"], background=PALETTE["bg"], borderwidth=0); style.configure("LoginBox.TLabelframe", background=PALETTE["surface"], foreground=PALETTE["cyan"], bordercolor=PALETTE["border"]); style.configure("LoginBox.TLabelframe.Label", background=PALETTE["surface"], foreground=PALETTE["cyan"], font=("Segoe UI", 9, "bold")); style.configure("Auth.TEntry", fieldbackground=PALETTE["surface_raised"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["border"], lightcolor=PALETTE["cyan"], darkcolor=PALETTE["border"], padding=9); style.map("Auth.TEntry", fieldbackground=[("focus", "#24164D")], bordercolor=[("focus", PALETTE["cyan"])])
+        style.configure("TNotebook", background=PALETTE["bg"], borderwidth=0); style.configure("TNotebook.Tab", background=PALETTE["surface_raised"], foreground=PALETTE["muted"], padding=(12, 7)); style.map("TNotebook.Tab", background=[("selected", PALETTE["violet"])], foreground=[("selected", PALETTE["text"])])
+        style.configure("Treeview", background=PALETTE["surface"], fieldbackground=PALETTE["surface"], foreground=PALETTE["text"], rowheight=30); style.configure("Treeview.Heading", background=PALETTE["surface_raised"], foreground=PALETTE["cyan"], font=("Segoe UI", 9, "bold")); style.map("Treeview", background=[("selected", PALETTE["violet"])], foreground=[("selected", PALETTE["text"])])
+        self.protocol("WM_DELETE_WINDOW",self.quit_app); self.show_login()
     def clear(self):
         for w in self.winfo_children(): w.destroy()
     def show_login(self): self.clear(); LoginFrame(self,self.login).pack(fill="both",expand=True)
