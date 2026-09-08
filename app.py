@@ -2,13 +2,11 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import shutil
+import sys
 import sqlite3
-import tempfile
 import tkinter as tk
-from tkinter import font as tkfont
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -29,6 +27,11 @@ PROMPT_TOOLS = ["ChatGPT", "Manus", "Copilot", "Claude", "Gemini", "Outra"]
 TIP_CATEGORIES = ["Analisar arquitetura", "Retomar projeto", "Continuar implementação", "Revisar código", "Refatorar com segurança", "Investigar erro", "Preparar publicação", "Melhorar testes", "Criar documentação", "Avaliar impacto de alteração"]
 FILE_CATEGORIES = ["Templates", "Documentações", "Referências", "Arquivos Gerais"]
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".zip", ".png", ".jpg", ".jpeg"}
+ASSET_DIR = Path(__file__).resolve().parent / "assets"
+
+def resource_path(name):
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / "assets" / name
 
 
 def now():
@@ -94,11 +97,13 @@ class Storage:
         self.seed_defaults()
 
     def seed_defaults(self):
-        if self.db.execute("SELECT COUNT(*) n FROM tips").fetchone()["n"]:
-            return
+        existing = {row["title"] for row in self.db.execute("SELECT title FROM tips")}
         t = now()
-        rows = [("Analisar arquitetura", "Analisar arquitetura", "Antes de alterar um projeto", "Entenda limites, dependências e riscos antes de editar.", "Analise a arquitetura atual deste projeto. Identifique componentes, fluxos, dependências, pontos frágeis e riscos. Não altere arquivos ainda; apresente um plano seguro."), ("Retomar projeto", "Retomar projeto", "Ao voltar após uma pausa", "Recupere rapidamente o contexto e o próximo passo.", "Retome este projeto a partir do estado atual. Resuma o que já existe, o que foi concluído, o que está pendente e indique o próximo passo mais seguro."), ("Investigar erro", "Investigar erro", "Quando surgir uma falha", "Organize a investigação antes de aplicar correções.", "Investigue este erro de forma sistemática. Explique a causa provável, evidências faltantes, reprodução e uma correção mínima com testes.")]
-        self.db.executemany("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", [r + (t, t) for r in rows]); self.db.commit()
+        rows = [("Analisar arquitetura", "Analisar arquitetura", "Antes de alterar um projeto", "Entenda limites, dependências e riscos antes de editar.", "Analise a arquitetura atual deste projeto. Identifique componentes, fluxos, dependências, pontos frágeis e riscos. Não altere arquivos ainda; apresente um plano seguro."), ("Retomar projeto", "Retomar projeto", "Ao voltar após uma pausa", "Recupere rapidamente o contexto e o próximo passo.", "Retome este projeto a partir do estado atual. Resuma o que já existe, o que foi concluído, o que está pendente e indique o próximo passo mais seguro."), ("Investigar erro", "Investigar erro", "Quando surgir uma falha", "Organize a investigação antes de aplicar correções.", "Investigue este erro de forma sistemática. Explique a causa provável, evidências faltantes, reprodução e uma correção mínima com testes."), ("Continuidade de Projeto", "Governança de Projetos", "Ao retomar qualquer projeto", "Preserve contexto, decisões e próximos passos.", "Retome este projeto com segurança. Resuma o estado atual, decisões tomadas, riscos, pendências, arquivos relevantes e o próximo passo verificável. Seja aplicável a web, desktop, mobile, APIs e ferramentas internas."), ("Arquitetura Limpa", "Governança de Projetos", "Antes de uma alteração estrutural", "Mantenha responsabilidades claras e evolução simples.", "Revise a arquitetura deste projeto buscando responsabilidades bem definidas, baixo acoplamento, dependências justificadas e simplicidade. Proponha apenas mudanças necessárias e preserve compatibilidade."), ("Economia de Tokens", "Governança de Projetos", "Ao preparar contexto para IA", "Reduza contexto redundante sem perder informação essencial.", "Otimize este contexto para uma execução eficiente. Remova redundâncias, preserve requisitos, restrições, decisões e critérios de aceite, e organize o material por prioridade."), ("Limpeza de Repositório", "Governança de Projetos", "Antes de publicar ou entregar", "Remova resíduos sem apagar recursos usados.", "Faça uma limpeza controlada do repositório. Identifique temporários, logs, artefatos, imports, componentes e assets sem uso. Não remova recursos referenciados; mostre o plano antes de excluir."), ("README Inteligente", "Governança de Projetos", "Ao preparar documentação", "Explique o necessário para outra pessoa manter o projeto.", "Atualize o README com visão geral, funcionalidades, instalação, execução local, build, deploy, download e estrutura básica. Seja objetivo e não documente o que não existe."), ("QA Final", "Governança de Projetos", "Antes de concluir uma entrega", "Valide comportamento, acessibilidade e distribuição.", "Execute uma revisão final. Verifique fluxos principais, botões, formulários, uploads, downloads, links, assets, persistência, build, dependências e mensagens de erro. Registre evidências e pendências."), ("Deploy Seguro", "Governança de Projetos", "Antes de publicar", "Reduza riscos de uma publicação incompleta.", "Prepare um deploy seguro: valide testes, build de produção, variáveis, assets, links, rollback e artefatos. Não publique se houver falha crítica; informe exatamente o que bloqueia."), ("Independência de IA", "Governança de Projetos", "Ao revisar sustentabilidade", "Garanta que o projeto permaneça mantível sem a IA.", "Revise este projeto para confirmar que ele funciona sem a IA que auxiliou o desenvolvimento, sem servidor externo desnecessário e sem dependência oculta. Simplifique abstrações e documente decisões essenciais.")]
+        rows = [row for row in rows if row[0] not in existing]
+        if rows:
+            self.db.executemany("INSERT INTO tips(title,category,when_to_use,explanation,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", [r + (t, t) for r in rows])
+            self.db.commit()
 
     def setting(self, key, default=None):
         row = self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
@@ -134,8 +139,20 @@ class Storage:
 class LoginFrame(ttk.Frame):
     def __init__(self, master, on_login):
         super().__init__(master, padding=(28, 22)); self.master = master; self.storage = master.storage; self.on_login = on_login; self.columnconfigure(0, weight=1); self.rowconfigure(0, weight=1)
-        shell = ttk.Frame(self, style="LoginShell.TFrame", padding=(34, 30)); shell.grid(row=0, column=0, sticky="nsew", padx=14, pady=14); shell.columnconfigure(0, weight=1)
-        ttk.Label(shell, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, pady=(0, 4))
+        shell = ttk.Frame(self, style="LoginShell.TFrame", padding=(34, 30)); shell.grid(row=0, column=0, sticky="nsew", padx=14, pady=14); shell.columnconfigure(0, weight=1); shell.rowconfigure(0, weight=1)
+        self.login_bg = None
+        try:
+            self.login_bg = tk.PhotoImage(file=str(resource_path("Fundo_Login_EricaQA_2912x2160.png")))
+            bg = tk.Label(shell, image=self.login_bg, borderwidth=0, highlightthickness=0, bg=PALETTE["bg"]); bg.place(relx=0, rely=0, relwidth=1, relheight=1); bg.lower()
+        except tk.TclError:
+            pass
+        overlay = tk.Frame(shell, bg="#070317", highlightthickness=0); overlay.place(relx=0, rely=0, relwidth=.48, relheight=1); overlay.lower()
+        self.profile_image = None
+        try:
+            self.profile_image = tk.PhotoImage(file=str(resource_path("Foto_Perfil_EricaQA_800x800.png")))
+            avatar = tk.Label(shell, image=self.profile_image, borderwidth=0, highlightthickness=0, bg=PALETTE["bg"]); avatar.grid(row=0, column=0, pady=(0, 8)); avatar.configure(width=112, height=112); avatar.pack_propagate(False)
+        except tk.TclError:
+            ttk.Label(shell, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, pady=(0, 4))
         ttk.Label(shell, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=1, column=0, pady=(0, 5))
         ttk.Label(shell, text=BRAND_TAGLINE, style="Subtitle.TLabel").grid(row=2, column=0, pady=(0, 24))
         box = ttk.LabelFrame(shell, text="  ACESSO PRIVADO  ", style="LoginBox.TLabelframe", padding=(22, 18)); box.grid(row=3, column=0, sticky="ew", padx=10); box.columnconfigure(0, weight=1)
@@ -176,7 +193,14 @@ class MainApp(ttk.Frame):
 
     def build(self):
         self.columnconfigure(0, weight=1); self.rowconfigure(2, weight=1)
-        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(1, weight=1); ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=0, sticky="w"); ttk.Label(header, text=f"Olá, {self.username}", style="Subtitle.TLabel").grid(row=0, column=1, sticky="w", padx=16); ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=2)
+        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(2, weight=1)
+        self.header_profile = None
+        try:
+            self.header_profile = tk.PhotoImage(file=str(resource_path("Foto_Perfil_EricaQA_800x800.png")))
+            avatar = tk.Label(header, image=self.header_profile, borderwidth=0, highlightthickness=0, bg=PALETTE["surface"]); avatar.grid(row=0, column=0, sticky="w", padx=(0, 10)); avatar.configure(width=42, height=42)
+        except tk.TclError:
+            ttk.Label(header, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=1, sticky="w"); ttk.Label(header, text=f"Olá, {self.username}", style="Subtitle.TLabel").grid(row=0, column=2, sticky="w", padx=16); ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=3)
         search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 8)); search.columnconfigure(1, weight=1); ttk.Label(search, text="Pesquisa global  (Ctrl+K)").grid(row=0, column=0, padx=(0, 8)); self.search = ttk.Entry(search, textvariable=self.search_var); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", lambda _: self.refresh_all()); ttk.Button(search, text="Limpar", command=lambda: self.search_var.set("")).grid(row=0, column=2, padx=6)
         self.tabs = ttk.Notebook(self); self.tabs.grid(row=2, column=0, sticky="nsew"); self.dashboard_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
 
@@ -206,7 +230,7 @@ class MainApp(ttk.Frame):
         self.prompts = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.prompts, text="Prompts"); self.toolbar(self.prompts, "Biblioteca de Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Copiar", self.copy_prompt), ("★ Favoritar", self.favorite)]); frame, self.prompt_tree = self.tree(self.prompts, ("fav", "name", "category", "project", "tool", "tags"), ("★", "Nome", "Categoria", "Projeto", "Ferramenta", "Tags")); frame.pack(fill="both", expand=True); self.prompt_tree.bind("<Double-1>", lambda _: self.edit_prompt())
 
     def tip_tab(self):
-        self.tips = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.tips, text="Dicas"); self.toolbar(self.tips, "Dicas de Prompt", self.new_tip, self.edit_tip, lambda: self.delete(self.tip_tree, "tips"), [("Copiar", self.copy_tip)]); frame, self.tip_tree = self.tree(self.tips, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True)
+        self.tips = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.tips, text="Governança"); self.toolbar(self.tips, "Governança de Projetos", self.new_tip, self.edit_tip, lambda: self.delete(self.tip_tree, "tips"), [("Copiar", self.copy_tip)]); frame, self.tip_tree = self.tree(self.tips, ("title", "category", "when"), ("Título", "Categoria", "Quando usar")); frame.pack(fill="both", expand=True)
 
     def code_tab(self):
         self.codes = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.codes, text="Códigos"); self.toolbar(self.codes, "Biblioteca de Códigos", self.new_code, self.edit_code, lambda: self.delete(self.code_tree, "codes"), [("Copiar", self.copy_code)]); frame, self.code_tree = self.tree(self.codes, ("name", "language", "project", "tags"), ("Nome", "Linguagem", "Projeto", "Tags")); frame.pack(fill="both", expand=True)

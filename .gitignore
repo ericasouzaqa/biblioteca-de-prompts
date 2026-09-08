@@ -6,3 +6,6 @@ __pycache__/
 *.sqlite
 *.sqlite3
 .central-de-prompts/
+build/
+dist/
+*.spec

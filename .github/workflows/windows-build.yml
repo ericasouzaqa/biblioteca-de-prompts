@@ -32,7 +32,7 @@ jobs:
           python -c "from PIL import Image,ImageDraw; im=Image.new('RGBA',(256,256),(7,3,23,255)); d=ImageDraw.Draw(im); d.rounded_rectangle((28,28,228,228), radius=45, outline=(255,79,216,255), width=12); d.line((128,70,128,185), fill=(0,229,255,255), width=10); d.arc((45,55,145,205), 250, 110, fill=(155,77,255,255), width=10); d.arc((111,55,211,205), 70, 290, fill=(0,229,255,255), width=10); im.save('favicon.ico')"
       - name: Build portable executable
         shell: pwsh
-        run: pyinstaller --clean --noconfirm --onefile --windowed --name BibliotecaDePrompts --icon=favicon.ico app.py
+        run: pyinstaller --clean --noconfirm --onefile --windowed --name BibliotecaDePrompts --icon=favicon.ico --add-data "assets/Fundo_Login_EricaQA_2912x2160.png;assets" --add-data "assets/Foto_Perfil_EricaQA_800x800.png;assets" app.py
 
       - name: Package
         shell: pwsh

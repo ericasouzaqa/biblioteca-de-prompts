@@ -1,78 +1,66 @@
-# Biblioteca de Prompts Erica QA
+# Biblioteca de Prompts
 
-Aplicação desktop local para preservar contexto entre projetos e ferramentas de IA. Organiza prompts, projetos, dicas, códigos técnicos e materiais relacionados em um banco SQLite persistente, com autenticação local e funcionamento sem internet em tempo de execução.
+## Visão Geral
 
-> Os dados pessoais e o banco local não pertencem ao repositório. Eles ficam em `~/.central-de-prompts/` e são excluídos do versionamento pelo `.gitignore`.
-
-## Download para Windows
-
-A versão Windows é distribuída como executável portátil em [Releases](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest). Baixe o ZIP, extraia e abra `BibliotecaDePrompts.exe` com duplo clique. O pacote já contém Python, SQLite, Tkinter e as DLLs necessárias; não é preciso instalar terminal, Python ou bibliotecas.
+Aplicação desktop local para organizar prompts, projetos, dicas, códigos e arquivos técnicos. Funciona offline, mantém os dados em SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
 ## Funcionalidades
 
-A aplicação possui um dashboard com métricas de prompts, favoritos, categorias e arquivos, além de atalhos para criação, favoritos, repositório e configurações. A biblioteca mantém projetos, prompts, dicas e códigos com criação, edição, exclusão, favoritos, cópia, tags, categorias e busca global.
+- Login local com senha derivada por `scrypt`.
+- Dashboard com métricas, favoritos e pesquisa global.
+- CRUD de projetos, prompts, governança, códigos e arquivos.
+- Repositório local com upload, download e hash SHA-256.
+- Backup JSON com transação e remapeamento de relações.
+- Identidade visual oficial com fundo e avatar Erica QA.
 
-O módulo **Repositório** permite importar, pesquisar, filtrar por categoria e baixar arquivos PDF, DOCX, XLSX, PPTX, TXT, ZIP, PNG, JPG e JPEG. Os arquivos são armazenados localmente com nome interno aleatório e hash SHA-256 para verificação de integridade.
+## Instalação
 
-A autenticação local mantém o hash da senha com `scrypt`. O fluxo **Esqueci minha senha** usa um token temporário, de uso único e com validade de 20 minutos. No modo offline, o token é exibido localmente. Uma integração real de e-mail pode ser adicionada posteriormente sem alterar o banco existente.
+### Windows
 
-## Recuperação e preservação de dados
+Baixe [`BibliotecaDePrompts-Windows.zip`](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest), extraia e execute `BibliotecaDePrompts.exe`. Não é necessário instalar Python. O banco é criado em `%USERPROFILE%\.central-de-prompts`.
 
-As atualizações criam uma cópia `central.db.before-update` antes de alterações estruturais. A importação de backup valida o formato, preserva os registros existentes, remapeia IDs de projetos relacionados e executa a operação em transação com rollback em caso de falha. A exportação inclui configurações, projetos, prompts, dicas, códigos e metadados do repositório.
+### macOS
 
-## Execução a partir do código-fonte
+O workflow [`macos-build.yml`](.github/workflows/macos-build.yml) gera `BibliotecaDePrompts-macOS.zip` em um runner macOS. O artefato deve ser extraído e o aplicativo `.app` aberto pelo Finder. A compilação macOS não é executada neste ambiente Linux.
 
-Requer Python 3.10 ou superior e Tkinter. No Ubuntu/Debian, se necessário, instale `python3-tk` pelo gerenciador de pacotes. Depois execute:
+## Execução Local
+
+Requer Python 3.10+ e Tkinter:
 
 ```bash
 python3 app.py
 ```
 
-Para validar a implementação:
+No Ubuntu/Debian, instale `python3-tk` quando necessário.
+
+## Build
+
+Windows, no GitHub Actions:
 
 ```bash
-python3 -m py_compile app.py
-python3 test_storage.py
-xvfb-run -a python3 test_gui.py
+python -m pip install pyinstaller pillow
+pyinstaller --clean --noconfirm --onefile --windowed --name BibliotecaDePrompts --icon=favicon.ico --add-data "assets/Fundo_Login_EricaQA_2912x2160.png;assets" --add-data "assets/Foto_Perfil_EricaQA_800x800.png;assets" app.py
 ```
 
-## Estrutura
+A versão Windows é publicada em tags `v*`. A versão macOS usa o workflow próprio e empacota o `.app` em ZIP.
+
+## Deploy
+
+A landing page está em [GitHub Pages](https://ericasouzaqa.github.io/biblioteca-de-prompts/). Ela é uma página pública de apresentação; os dados da biblioteca permanecem locais.
+
+## Download
+
+- [Release mais recente](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest)
+- [Executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest)
+- [GitHub Pages](https://ericasouzaqa.github.io/biblioteca-de-prompts/)
+
+## Estrutura Básica
 
 | Caminho | Responsabilidade |
 |---|---|
-| `app.py` | Interface Tkinter, autenticação, persistência, dashboard, biblioteca e repositório |
-| `test_storage.py` | Testes isolados de SQLite, hash e recuperação de senha |
-| `test_gui.py` | Smoke test de inicialização da interface em display virtual |
-| `docs/index.html` | Página pública responsiva do projeto para GitHub Pages |
-| `.github/workflows/windows-build.yml` | Build portátil Windows via PyInstaller e publicação de release |
-| `AUDIT_FINDINGS.md` | Auditoria arquitetural, riscos e estratégia de atualização |
-
-## Links de distribuição
-
-- **GitHub Pages:** https://ericasouzaqa.github.io/biblioteca-de-prompts/
-- **Release mais recente:** https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest
-- **Executável Windows:** disponível como `BibliotecaDePrompts-Windows.zip` na Release mais recente
-
-## GitHub Pages
-
-A aplicação principal é desktop e depende de SQLite local, portanto não pode ser executada diretamente em GitHub Pages sem perder privacidade e persistência. Como alternativa compatível, `docs/index.html` fornece uma página pública responsiva de apresentação e download. O aplicativo continua sendo a fonte de dados e de funcionalidades completas.
-
-## Desenvolvimento e publicação
-
-O workflow `Build Windows` é executado em tags `v*`. Ele gera `BibliotecaDePrompts.exe`, cria `BibliotecaDePrompts-Windows.zip`, publica os artefatos e mantém o executável independente de serviços externos durante o uso.
-
-## Identidade visual
-
-A interface utiliza a direção visual futurista solicitada: fundo escuro em tons `#070317`, `#0B0820` e `#120B2E`, acentos rosa neon `#FF4FD8`, roxo `#9B4DFF`, ciano `#00E5FF`, cards arredondados, foco visível e contraste reforçado. As imagens de referência citadas na especificação não estavam presentes no repositório no momento da auditoria; por isso a implementação usa a paleta e o sistema visual sem inventar arquivos pessoais.
-
-## Limites conhecidos
-
-A recuperação de senha offline não envia e-mails por não haver provedor configurado. O GitHub Pages é uma landing page, não uma réplica da biblioteca privada. A sincronização entre dispositivos e o envio de e-mail exigiriam um serviço externo opcional, ausente por decisão de independência operacional.
-
-## Instalação no Windows
-
-1. Baixe `BibliotecaDePrompts-Windows.zip` na [Release mais recente](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/latest).
-2. Extraia o ZIP para uma pasta de sua preferência.
-3. Execute `BibliotecaDePrompts.exe`. O banco local será criado em `%USERPROFILE%\.central-de-prompts`.
-
-O executável é portátil: não exige Python instalado nem conexão com a internet durante o uso.
+| `app.py` | Interface Tkinter, persistência, autenticação e funcionalidades locais |
+| `assets/` | Logo, favicon, fundo e avatar oficiais |
+| `docs/` | Landing page e assets do GitHub Pages |
+| `.github/workflows/` | Builds Windows, macOS e deploy do Pages |
+| `test_storage.py` | Testes de SQLite, hash e recuperação de senha |
+| `test_gui.py` | Smoke test da interface |
