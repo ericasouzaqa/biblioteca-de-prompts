@@ -20,14 +20,11 @@ PALETTE = {
     "violet": "#7C3AED", "cyan": "#00E5FF", "success": "#6EE7B7",
 }
 APP_DIR = Path.home() / ".central-de-prompts"
-DB_PATH = APP_DIR / "central.db"
-FILE_DIR = APP_DIR / "files"
 STATUSES = ["Em testes", "Ativo", "Em construção", "Congelado"]
 PROMPT_TOOLS = ["ChatGPT", "Manus", "Copilot", "Claude", "Gemini", "Outra"]
 TIP_CATEGORIES = ["Analisar arquitetura", "Retomar projeto", "Continuar implementação", "Revisar código", "Refatorar com segurança", "Investigar erro", "Preparar publicação", "Melhorar testes", "Criar documentação", "Avaliar impacto de alteração"]
 FILE_CATEGORIES = ["Templates", "Documentações", "Referências", "Arquivos Gerais"]
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".zip", ".png", ".jpg", ".jpeg"}
-ASSET_DIR = Path(__file__).resolve().parent / "assets"
 
 def resource_path(name):
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))

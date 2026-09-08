@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install build tools
-        run: python -m pip install --upgrade pip pyinstaller pillow
+        run: python -m pip install --upgrade pip pyinstaller
       - name: Build macOS app
         run: pyinstaller --clean --noconfirm --windowed --name BibliotecaDePrompts --add-data 'assets/Fundo_Login_EricaQA_2912x2160.png:assets' --add-data 'assets/Foto_Perfil_EricaQA_800x800.png:assets' app.py
       - name: Package app
