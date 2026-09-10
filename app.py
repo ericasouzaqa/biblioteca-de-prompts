@@ -17,7 +17,7 @@ PALETTE = {
     "bg": "#070317", "surface": "#100A26", "surface_raised": "#181039",
     "border": "#3A2866", "text": "#FFFFFF", "muted": "#CBD5E1",
     "pink": "#FF4FD8", "magenta": "#E535C7", "purple": "#9B4DFF",
-    "violet": "#7C3AED", "cyan": "#00E5FF", "success": "#6EE7B7",
+    "violet": "#7C3AED", "cyan": "#00E5FF",
 }
 APP_DIR = Path.home() / ".central-de-prompts"
 STATUSES = ["Em testes", "Ativo", "Em construção", "Congelado"]
@@ -186,7 +186,7 @@ class LoginFrame(ttk.Frame):
 
 class MainApp(ttk.Frame):
     def __init__(self, master, username, logout):
-        super().__init__(master, padding=12); self.master = master; self.storage = master.storage; self.username = username; self.logout = logout; self.project_map = {}; self.search_var = tk.StringVar(); self.build(); self.bind_all("<Control-k>", lambda _: self.search.focus_set())
+        super().__init__(master, padding=12); self.master = master; self.storage = master.storage; self.username = username; self.logout = logout; self.project_map = {}; self.search_var = tk.StringVar(); self.refresh_job = None; self.build(); self.bind_all("<Control-k>", self.focus_search)
 
     def build(self):
         self.columnconfigure(0, weight=1); self.rowconfigure(2, weight=1)
@@ -198,7 +198,7 @@ class MainApp(ttk.Frame):
         except tk.TclError:
             ttk.Label(header, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
         ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=1, sticky="w"); ttk.Label(header, text=f"Olá, {self.username}", style="Subtitle.TLabel").grid(row=0, column=2, sticky="w", padx=16); ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=3)
-        search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 8)); search.columnconfigure(1, weight=1); ttk.Label(search, text="Pesquisa global  (Ctrl+K)").grid(row=0, column=0, padx=(0, 8)); self.search = ttk.Entry(search, textvariable=self.search_var); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", lambda _: self.refresh_all()); ttk.Button(search, text="Limpar", command=lambda: self.search_var.set("")).grid(row=0, column=2, padx=6)
+        search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 8)); search.columnconfigure(1, weight=1); ttk.Label(search, text="Pesquisa global  (Ctrl+K)").grid(row=0, column=0, padx=(0, 8)); self.search = ttk.Entry(search, textvariable=self.search_var); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", self.schedule_refresh); ttk.Button(search, text="Limpar", command=self.clear_search).grid(row=0, column=2, padx=6)
         self.tabs = ttk.Notebook(self); self.tabs.grid(row=2, column=0, sticky="nsew"); self.dashboard_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
 
     def dashboard_tab(self):
@@ -212,8 +212,8 @@ class MainApp(ttk.Frame):
 
     def tree(self, parent, cols, heads):
         frame = ttk.Frame(parent); frame.columnconfigure(0, weight=1); frame.rowconfigure(0, weight=1); tree = ttk.Treeview(frame, columns=cols, show="headings");
-        for c, h in zip(cols, heads): tree.heading(c, text=h); tree.column(c, width=150, anchor="w")
-        tree.grid(row=0, column=0, sticky="nsew"); scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); scrollbar.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=scrollbar.set); return frame, tree
+        for c, h in zip(cols, heads): tree.heading(c, text=h); tree.column(c, width=150, minwidth=90, anchor="w", stretch=True)
+        tree.grid(row=0, column=0, sticky="nsew"); vertical = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); vertical.grid(row=0, column=1, sticky="ns"); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview); horizontal.grid(row=1, column=0, sticky="ew"); tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set); return frame, tree
 
     def toolbar(self, parent, title, new, edit, delete, extras=()):
         bar = ttk.Frame(parent); bar.pack(fill="x", pady=(0, 8)); ttk.Label(bar, text=title, style="Section.TLabel").pack(side="left");
@@ -240,11 +240,25 @@ class MainApp(ttk.Frame):
         for text, fn in [("Exportar backup seguro", self.export_backup), ("Importar backup seguro", self.import_backup), ("Alterar senha", self.change_password), ("Configurar e-mail de recuperação", self.configure_email), ("Abrir pasta de dados", lambda: messagebox.showinfo(APP_NAME, str(self.storage.base_dir))), ("Sobre a aplicação", self.about)]: ttk.Button(self.settings, text=text, command=fn).pack(anchor="w", pady=4)
         ttk.Separator(self.settings).pack(fill="x", pady=18); ttk.Label(self.settings, text="Recuperação por e-mail requer um serviço externo; no modo offline, um token temporário é exibido localmente e expira em 20 minutos.", wraplength=700, style="Muted.TLabel").pack(anchor="w")
 
+    def focus_search(self, _event=None):
+        if self.search.winfo_exists():
+            self.search.focus_set()
+        return "break"
+
+    def clear_search(self):
+        self.search_var.set(""); self.schedule_refresh()
+
+    def schedule_refresh(self, _event=None):
+        if self.refresh_job:
+            self.after_cancel(self.refresh_job)
+        self.refresh_job = self.after(150, self.refresh_all)
+
     def query(self, table, order="updated_at DESC", extra="", params=()):
         q = self.search_var.get().strip().lower(); values = list(params); where = extra
         if q:
-            fields = {"projects": "name || ' ' || objective || ' ' || github_repo || ' ' || tool || ' ' || status", "prompts": "name || ' ' || category || ' ' || objective || ' ' || trigger || ' ' || content || ' ' || tags", "tips": "title || ' ' || category || ' ' || when_to_use || ' ' || explanation || ' ' || content", "codes": "name || ' ' || language || ' ' || purpose || ' ' || content || ' ' || tags", "files": "name || ' ' || category || ' ' || extension || ' ' || notes"}[table]
-            where = (where + " AND " if where else "WHERE ") + f"LOWER({fields}) LIKE ?"; values.append(f"%{q}%")
+            fields = {"projects": ("name", "objective", "github_repo", "tool", "status"), "prompts": ("name", "category", "objective", "trigger", "content", "tags"), "tips": ("title", "category", "when_to_use", "explanation", "content"), "codes": ("name", "language", "purpose", "content", "tags"), "files": ("name", "category", "extension", "notes")}[table]
+            searchable = " || ' ' || ".join(f"COALESCE({field}, '')" for field in fields)
+            where = (where + " AND " if where else "WHERE ") + f"LOWER({searchable}) LIKE ?"; values.append(f"%{q}%")
         return self.storage.rows(table, where + (" ORDER BY " + order if order else ""), values)
 
     def refresh_all(self):
@@ -255,7 +269,13 @@ class MainApp(ttk.Frame):
         for r in self.query("tips"): self.tip_tree.insert("", "end", iid=str(r["id"]), values=(r["title"], r["category"] or "", r["when_to_use"] or ""))
         for r in self.query("codes"): self.code_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["language"] or "", self.project_map.get(r["project_id"], ""), r["tags"] or ""))
         for r in self.query("files", "created_at DESC"): self.file_tree.insert("", "end", iid=str(r["id"]), values=(r["name"], r["category"], r["extension"], self.human_size(r["size"]), r["created_at"]))
-        c = self.storage.counts(); self.metrics["prompts"].configure(text=str(c["prompts"])); self.metrics["files"].configure(text=str(c["files"])); self.metrics["favorites"].configure(text=str(self.storage.db.execute("SELECT COUNT(*) n FROM prompts WHERE favorite=1").fetchone()["n"])); self.metrics["categories"].configure(text=str(self.storage.db.execute("SELECT COUNT(DISTINCT category) n FROM prompts WHERE category IS NOT NULL AND category!=''").fetchone()["n"])); self.activity.configure(text=f"Última atualização: {now()}  •  {c['prompts']} prompts, {c['files']} arquivos")
+        self.refresh_job = None; c = self.storage.counts(); self.metrics["prompts"].configure(text=str(c["prompts"])); self.metrics["files"].configure(text=str(c["files"])); self.metrics["favorites"].configure(text=str(self.storage.db.execute("SELECT COUNT(*) n FROM prompts WHERE favorite=1").fetchone()["n"])); self.metrics["categories"].configure(text=str(self.storage.db.execute("SELECT COUNT(DISTINCT category) n FROM prompts WHERE category IS NOT NULL AND category!=''").fetchone()["n"])); self.activity.configure(text=f"Última atualização: {now()}  •  {c['prompts']} prompts, {c['files']} arquivos")
+
+    def destroy(self):
+        if self.refresh_job:
+            self.after_cancel(self.refresh_job)
+        self.unbind_all("<Control-k>")
+        super().destroy()
 
     @staticmethod
     def human_size(size):
