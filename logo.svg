@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Biblioteca de Prompts</title>
+  <desc id="desc">Ícone de livro aberto com brilho de inteligência artificial e lente de pesquisa</desc>
+  <defs>
+    <linearGradient id="brand" x1="28" y1="30" x2="228" y2="228" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4FD8"/>
+      <stop offset=".28" stop-color="#E535C7"/>
+      <stop offset=".58" stop-color="#9B4DFF"/>
+      <stop offset="1" stop-color="#00E5FF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#070317"/>
+  <g fill="none" stroke="url(#brand)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)">
+    <path d="M128 72C99 52 64 52 36 70v118c28-18 63-18 92 2V72Z"/>
+    <path d="M128 72c29-20 64-20 92-2v118c-28-18-63-18-92 2V72Z"/>
+    <path d="M128 72v118"/>
+    <path d="M61 101h38M61 128h38M157 101h38M157 128h38" stroke-width="8"/>
+  </g>
+  <g fill="none" stroke="#00E5FF" stroke-width="7" stroke-linecap="round">
+    <circle cx="199" cy="54" r="22"/>
+    <path d="m215 70 20 20"/>
+    <path d="M199 42v24M187 54h24" stroke-width="5"/>
+  </g>
+  <circle cx="199" cy="54" r="6" fill="#FF4FD8"/>
+</svg>
