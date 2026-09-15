@@ -31,7 +31,15 @@ def application_dir():
 def default_data_dir():
     app_dir = application_dir()
     portable = os.environ.get("BIBLIOTECA_PORTABLE", "").strip().lower() in {"1", "true", "sim", "yes"} or (app_dir / "portable.flag").exists()
-    return app_dir / "data" if portable else Path.home() / ".central-de-prompts"
+    if portable:
+        return app_dir / "data"
+    legacy = Path.home() / ".central-de-prompts"
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+        if appdata:
+            target = Path(appdata) / "BibliotecaDePrompts"
+            return legacy if (legacy / "central.db").exists() and not (target / "central.db").exists() else target
+    return legacy
 
 
 APP_DIR = default_data_dir()
@@ -590,18 +598,19 @@ class MainApp(ttk.Frame):
 
     def dashboard_tab(self):
         tab = ttk.Frame(self.tabs, padding=18); self.dashboard = tab; self.tabs.add(tab, text="Dashboard"); tab.columnconfigure((0, 1, 2, 3), weight=1)
-        ttk.Label(tab, text="Visão geral e produtividade", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 10))
+        ttk.Label(tab, text="Visão geral e produtividade", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        ttk.Label(tab, text="Privacidade local: prompts, projetos, arquivos e banco SQLite permanecem neste dispositivo.", style="Muted.TLabel").grid(row=1, column=0, columnspan=5, sticky="w", pady=(0, 6))
         self.metrics = {}
         cards = [("prompts","Prompts"),("projects","Projetos"),("tips","Governanças"),("codes","Códigos"),("files","Arquivos"),("knowledge","Wiki"),("templates","Templates"),("versions","Versões"),("trash","Lixeira")]
         for i, (key, label) in enumerate(cards):
-            row, column = 1 + i // 5, i % 5
+            row, column = 2 + i // 5, i % 5
             card = ttk.LabelFrame(tab, text=label, padding=10); card.grid(row=row, column=column, sticky="nsew", padx=3, pady=3); self.metrics[key] = ttk.Label(card, text="0", style="Metric.TLabel"); self.metrics[key].pack()
-        self.storage_info = ttk.Label(tab, text="", style="Muted.TLabel"); self.storage_info.grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
-        self.backup_info = ttk.Label(tab, text="", style="Muted.TLabel"); self.backup_info.grid(row=3, column=2, columnspan=3, sticky="w", pady=(12, 0))
-        ttk.Label(tab, text="Acesso rápido", style="Section.TLabel").grid(row=4, column=0, columnspan=5, sticky="w", pady=(16, 6)); actions = ttk.Frame(tab); actions.grid(row=5, column=0, columnspan=5, sticky="w")
+        self.storage_info = ttk.Label(tab, text="", style="Muted.TLabel"); self.storage_info.grid(row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        self.backup_info = ttk.Label(tab, text="", style="Muted.TLabel"); self.backup_info.grid(row=4, column=2, columnspan=3, sticky="w", pady=(12, 0))
+        ttk.Label(tab, text="Acesso rápido", style="Section.TLabel").grid(row=5, column=0, columnspan=5, sticky="w", pady=(16, 6)); actions = ttk.Frame(tab); actions.grid(row=6, column=0, columnspan=5, sticky="w")
         for label, fn in [("Novo Prompt (Ctrl+N)", self.new_prompt), ("Favoritos (Ctrl+F)", self.show_favorites), ("Fixados", self.show_pinned), ("Recentes", self.show_recent), ("Templates", lambda: self.tabs.select(self.templates)), ("Wiki", lambda: self.tabs.select(self.knowledge)), ("Verificar", self.verify_library)]: ttk.Button(actions, text=label, command=fn).pack(side="left", padx=(0, 6))
-        self.productivity = ttk.Label(tab, text="", style="Muted.TLabel"); self.productivity.grid(row=6, column=0, columnspan=5, sticky="w", pady=(14, 4))
-        self.activity = ttk.Label(tab, text="", style="Muted.TLabel"); self.activity.grid(row=7, column=0, columnspan=5, sticky="w", pady=4)
+        self.productivity = ttk.Label(tab, text="", style="Muted.TLabel"); self.productivity.grid(row=7, column=0, columnspan=5, sticky="w", pady=(14, 4))
+        self.activity = ttk.Label(tab, text="", style="Muted.TLabel"); self.activity.grid(row=8, column=0, columnspan=5, sticky="w", pady=4)
 
     def tree(self, parent, cols, heads):
         frame = ttk.Frame(parent); frame.columnconfigure(0, weight=1); frame.rowconfigure(0, weight=1); tree = ttk.Treeview(frame, columns=cols, show="headings");
@@ -731,7 +740,7 @@ class MainApp(ttk.Frame):
 
     def export_health_report(self):
         path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Texto", "*.txt"), ("Markdown", "*.md")])
-        if not path:
+        if not path or not self.confirm_export("O relatório de saúde"):
             return
         markdown = Path(path).suffix.lower() == ".md"
         Path(path).write_text(self.health_report_text(markdown), encoding="utf-8")
@@ -744,7 +753,7 @@ class MainApp(ttk.Frame):
         for index, (kind, item) in enumerate(issues): tree.insert("", "end", iid=str(index), values=(kind, item))
         def remove_selected():
             selected = tree.selection()
-            if not selected or not messagebox.askyesno(APP_NAME, "Remover manualmente o item selecionado?"):
+            if not selected or not messagebox.askyesno(APP_NAME, "Remover permanentemente o item selecionado? Esta ação não poderá ser desfeita.", parent=win):
                 return
             kind, item = tree.item(selected[0], "values")
             if kind == "Arquivo órfão":
@@ -840,6 +849,9 @@ class MainApp(ttk.Frame):
     def copy_tip(self): self.copy_row(self.tip_tree, "tips", "content")
     def copy_code(self): self.copy_row(self.code_tree, "codes", "content")
 
+    def confirm_export(self, description):
+        return messagebox.askyesno(APP_NAME, f"{description} será gravado no local escolhido por você.\n\nO arquivo pode conter dados da sua biblioteca. Continuar?", parent=self)
+
     def export_selected(self, tree, table):
         rid = self.selected(tree)
         if not rid:
@@ -849,7 +861,7 @@ class MainApp(ttk.Frame):
             return
         name = row["name"] if "name" in row.keys() else row["title"]
         path = filedialog.asksaveasfilename(defaultextension=".json", initialfile=name, filetypes=[("JSON", "*.json"), ("Texto", "*.txt"), ("Markdown", "*.md")])
-        if not path:
+        if not path or not self.confirm_export(f"A exportação de {name}"):
             return
         data = dict(row)
         if table == "files":
@@ -1117,7 +1129,7 @@ class MainApp(ttk.Frame):
         collection=dict(self.storage.db.execute("SELECT * FROM collections WHERE id=?",(cid,)).fetchone());items=[(r["entity_type"],r["entity_id"]) for r in self.storage.db.execute("SELECT entity_type,entity_id FROM collection_items WHERE collection_id=?",(cid,))];self.save_collection_payload(self.collection_payload(items,collection))
     def save_collection_payload(self,payload):
         path=filedialog.asksaveasfilename(defaultextension=".json",filetypes=[("JSON","*.json"),("Markdown","*.md")])
-        if not path:return
+        if not path or not self.confirm_export("A coleção"):return
         if Path(path).suffix.lower()==".md":
             lines=[f"# {payload.get('metadata',{}).get('name','Coleção')}",""]
             for item in payload["items"]:row=item["data"];lines.extend([f"## {ENTITY_LABELS[item['type']]} — {row.get(ENTITY_NAME_FIELDS[item['type']],'')}","",str(row.get("content") or row.get("objective") or row.get("purpose") or ""),""])
@@ -1152,7 +1164,7 @@ class MainApp(ttk.Frame):
         return "\n".join(lines)+"\n"
     def export_general_report(self):
         path=filedialog.asksaveasfilename(defaultextension=".txt",filetypes=[("Texto","*.txt"),("Markdown","*.md")])
-        if path:Path(path).write_text(self.general_report_text(Path(path).suffix.lower()==".md"),encoding="utf-8");self.storage.log_activity("exportação","relatório",None,Path(path).name);messagebox.showinfo(APP_NAME,"Relatório geral exportado.")
+        if path and self.confirm_export("O relatório geral"):Path(path).write_text(self.general_report_text(Path(path).suffix.lower()==".md"),encoding="utf-8");self.storage.log_activity("exportação","relatório",None,Path(path).name);messagebox.showinfo(APP_NAME,"Relatório geral exportado.")
     def show_activity_log(self):
         win=tk.Toplevel(self);win.title("Log de atividades");win.transient(self);win.geometry("880x520");frame,tree=self.tree(win,("date","action","type","item","details"),("Data","Ação","Tipo","ID","Detalhes"));frame.pack(fill="both",expand=True,padx=12,pady=12)
         for r in self.storage.db.execute("SELECT * FROM activity_log ORDER BY id DESC LIMIT 500"):tree.insert("","end",values=(r["created_at"],r["action"],r["entity_type"] or "",r["entity_id"] or "",r["details"] or ""))
@@ -1161,7 +1173,7 @@ class MainApp(ttk.Frame):
         win=tk.Toplevel(self);win.title("Diagnóstico de instalação");win.transient(self);win.geometry("760x560");box=tk.Text(win,wrap="word",font=("Segoe UI",12),bg=PALETTE["input"],fg=PALETTE["text"]);box.pack(fill="both",expand=True,padx=12,pady=12);box.insert("1.0","\n".join(lines));box.configure(state="disabled")
         def export():
             target=filedialog.asksaveasfilename(defaultextension=".txt",filetypes=[("Texto","*.txt"),("Markdown","*.md")])
-            if target:Path(target).write_text("\n".join(lines)+"\n",encoding="utf-8");self.storage.log_activity("exportação","instalação",None,Path(target).name)
+            if target and self.confirm_export("O diagnóstico da instalação"):Path(target).write_text("\n".join(lines)+"\n",encoding="utf-8");self.storage.log_activity("exportação","instalação",None,Path(target).name)
         ttk.Button(win,text="Exportar TXT/Markdown",command=export).pack(anchor="e",padx=12,pady=(0,12))
 
     def upload_file(self):
@@ -1180,7 +1192,7 @@ class MainApp(ttk.Frame):
         rid=self.selected(self.file_tree)
         if not rid:return
         r=self.storage.db.execute("SELECT * FROM files WHERE id=?",(rid,)).fetchone(); path=filedialog.asksaveasfilename(initialfile=r["name"]);
-        if path: shutil.copy2(self.storage.file_dir/r["stored_name"],path); self.storage.record_access("files",rid); self.storage.log_activity("exportação","files",rid,r["name"]);
+        if path and self.confirm_export(f"O arquivo {r['name']}"): shutil.copy2(self.storage.file_dir/r["stored_name"],path); self.storage.record_access("files",rid); self.storage.log_activity("exportação","files",rid,r["name"]);
     def delete_file(self):
         rid=self.selected(self.file_tree)
         if not rid or not messagebox.askyesno(APP_NAME,"Mover arquivo e registro para a lixeira?"):return
@@ -1205,7 +1217,7 @@ class MainApp(ttk.Frame):
         return payload
     def export_backup(self):
         path=filedialog.asksaveasfilename(defaultextension=".json",filetypes=[("Backup JSON","*.json")])
-        if not path:return
+        if not path or not self.confirm_export("O backup local"):return
         payload=self._backup_payload();raw=json.dumps(payload,ensure_ascii=False,indent=2);envelope={"format":"biblioteca-de-prompts-backup","sha256":hashlib.sha256(raw.encode("utf-8")).hexdigest(),"payload":payload}
         Path(path).write_text(json.dumps(envelope,ensure_ascii=False,indent=2),encoding="utf-8");self.storage.set_setting("last_backup_at",now());self.storage.log_activity("exportação","backup",None,Path(path).name);messagebox.showinfo(APP_NAME,"Backup exportado com verificação de integridade.")
     def _stage_backup_files(self,payload):
@@ -1297,7 +1309,11 @@ class App(tk.Tk):
         style.configure("TCombobox", fieldbackground=PALETTE["input"], background=PALETTE["input"], foreground=PALETTE["text"], arrowcolor=PALETTE["cyan"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=10, font=("Segoe UI", 14)); style.map("TCombobox", fieldbackground=[("readonly", PALETTE["input"]), ("focus", "#2B1A5A")], foreground=[("readonly", PALETTE["text"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
         style.configure("TNotebook", background=PALETTE["bg"], borderwidth=0); style.configure("TNotebook.Tab", background=PALETTE["surface_raised"], foreground=PALETTE["muted"], padding=(14, 10), font=("Segoe UI", 14, "bold")); style.map("TNotebook.Tab", background=[("selected", PALETTE["violet"]), ("active", PALETTE["purple"])], foreground=[("selected", PALETTE["text"]), ("active", PALETTE["text"])])
         style.configure("Treeview", background=PALETTE["surface"], fieldbackground=PALETTE["surface"], foreground=PALETTE["text"], rowheight=38, font=("Segoe UI", 14), bordercolor=PALETTE["border"]); style.configure("Treeview.Heading", background=PALETTE["surface_raised"], foreground=PALETTE["cyan"], font=("Segoe UI", 14, "bold"), padding=(8, 8)); style.map("Treeview", background=[("selected", PALETTE["selection"]), ("focus", PALETTE["selection"])], foreground=[("selected", PALETTE["text"])])
-        self.protocol("WM_DELETE_WINDOW",self.quit_app); self.show_login()
+        self.protocol("WM_DELETE_WINDOW",self.quit_app)
+        if self.storage.setting("password_hash"):
+            self.show_login()
+        else:
+            self.login(self.storage.setting("username", "Usuário local"))
     def clear(self):
         for w in self.winfo_children(): w.destroy()
     def show_login(self): self.clear(); LoginFrame(self,self.login).pack(fill="both",expand=True)
