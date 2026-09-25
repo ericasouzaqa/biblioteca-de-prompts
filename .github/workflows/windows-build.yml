@@ -45,4 +45,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" BibliotecaDePrompts-Windows.zip dist/BibliotecaDePrompts.exe --title "Biblioteca de Prompts ${GITHUB_REF_NAME}" --generate-notes
+        run: |
+          for i in {1..20}; do
+            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+              gh release upload "${GITHUB_REF_NAME}" BibliotecaDePrompts-Windows.zip dist/BibliotecaDePrompts.exe --clobber
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Release ${GITHUB_REF_NAME} não ficou disponível a tempo" >&2
+          exit 1
