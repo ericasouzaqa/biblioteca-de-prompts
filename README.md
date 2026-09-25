@@ -4,14 +4,28 @@
 
 Aplicação desktop local para organizar prompts, projetos, governança, códigos e arquivos técnicos. Funciona offline, usa SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
+**Versão:** v0.3.1 — Simplificação Radical da Experiência.
+
+## Navegação principal
+
+A versão 0.3.0 prioriza o trabalho diário com seis entradas visíveis: **Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais**. Governança, Wiki, Templates, Coleções, Códigos, Configurações, Diagnóstico, Relatórios e Lixeira permanecem disponíveis no menu Mais.
+
+A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o usuário parou, o próximo passo, o último prompt utilizado e o repositório relacionado. A busca global usa o placeholder “Pesquisar projetos, prompts ou repositórios...” e permite localizar rapidamente o conteúdo da biblioteca.
+
 ## Funcionalidades
 
 - Login local com senha derivada por `scrypt`.
-- Dashboard, favoritos e pesquisa global.
-- Projetos, prompts, governança, códigos e arquivos.
+- Navegação simplificada para Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais.
+- Home orientada à continuidade do trabalho.
+- Busca global de projetos, prompts e repositórios.
+- Governança, Wiki, templates, coleções, códigos, relatórios, diagnóstico e lixeira no menu avançado.
 - Upload, download e hash SHA-256 para arquivos locais.
 - Backup e restauração JSON transacional.
 - Identidade visual Erica QA no desktop e GitHub Pages.
+
+## Compatibilidade e migração
+
+Não é necessária nenhuma migração para a v0.3.1. Não houve alteração de banco de dados, schema ou persistência. A versão é compatível com dados existentes e com backups existentes.
 
 ## Instalação
 
