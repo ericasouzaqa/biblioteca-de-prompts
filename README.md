@@ -4,11 +4,11 @@
 
 Aplicação desktop local para organizar prompts, projetos, governança, códigos e arquivos técnicos. Funciona offline, usa SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
-**Versão:** v0.3.1 — Simplificação Radical da Experiência.
+**Versão publicada:** v1.0.3 — reforço de privacidade, acessibilidade e experiência de uso.
 
 ## Navegação principal
 
-A versão 0.3.0 prioriza o trabalho diário com seis entradas visíveis: **Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais**. Governança, Wiki, Templates, Coleções, Códigos, Configurações, Diagnóstico, Relatórios e Lixeira permanecem disponíveis no menu Mais.
+A versão atual prioriza o trabalho diário com seis entradas visíveis: **Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais**. Governança, Wiki, Templates, Coleções, Códigos, Configurações, Diagnóstico, Relatórios e Lixeira permanecem disponíveis no menu Mais.
 
 A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o usuário parou, o próximo passo, o último prompt utilizado e o repositório relacionado. A busca global usa o placeholder “Pesquisar projetos, prompts ou repositórios...” e permite localizar rapidamente o conteúdo da biblioteca.
 
@@ -25,7 +25,7 @@ A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o
 
 ## Compatibilidade e migração
 
-Não é necessária nenhuma migração para a v0.3.1. Não houve alteração de banco de dados, schema ou persistência. A versão é compatível com dados existentes e com backups existentes.
+Não é necessária nenhuma migração destrutiva para a v1.0.3. As alterações de schema são aditivas e protegidas por backup preventivo; a versão é compatível com dados existentes e com backups existentes.
 
 ## Instalação
 
@@ -56,4 +56,4 @@ O build macOS usa o workflow próprio e empacota o aplicativo `.app` em ZIP. Os 
 
 ## Deploy
 
-A landing page é publicada em [GitHub Pages](https://ericasouzaqa.github.io/biblioteca-de-prompts/). Ela apresenta o projeto e usa os assets em `docs/assets/`; os dados da biblioteca permanecem locais.
+A landing page está preparada em `docs/` e é publicada pelo workflow de GitHub Pages quando o recurso está habilitado no repositório. Como este repositório é privado e a conta/plano atual não expõe o site publicamente, a URL pode retornar 404; a distribuição oficial continua sendo a Release do GitHub. Os dados da biblioteca permanecem locais.
