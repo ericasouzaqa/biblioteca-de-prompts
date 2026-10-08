@@ -50,7 +50,7 @@ As imagens foram capturadas em display virtual com resolução de 1280×1024.
 - [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts-Windows.zip)
 - [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts.exe)
 - Workflow Windows concluído com sucesso na execução da tag `v1.0.4`.
-- ZIP publicado verificado localmente: contém `BibliotecaDePrompts.exe` com 15.165.003 bytes; SHA-256 do ZIP publicado: `ec78e914543f030e81368fd0cf23b53cbe65d6cfd97496a77dfd643f01a5da64`.
+- O workflow confirmou o ZIP publicado com 14.911.407 bytes e o executável com 15.166.408 bytes. SHA-256 informado pela API do GitHub: ZIP `9e9e21552f328d2826c649f4b7dd3e71abf28bd8a03969b565db13504c05ded7`; EXE `5c11000dfabf725406e0cd12b7134a9b7b6402f49a63ef66ce0ffd82a8ee0656`.
 
 ## GitHub Pages
 
