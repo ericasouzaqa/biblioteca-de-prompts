@@ -2,17 +2,17 @@
 
 ## Resultado
 
-A versão atualmente publicada e validada é **v1.0.3** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
+A versão de produção em validação é **v1.0.4** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
 
 ## Alterações confirmadas
 
 - Interface Tkinter reorganizada para priorizar **Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais**.
+- Modo produção sem autenticação: a tela de login, usuário, senha, recuperação e saudação personalizada foram removidos; o aplicativo abre diretamente a Home.
 - Home orientada à continuidade do trabalho, com contexto atual, último ponto de parada, próximo passo e prompt recente.
 - Busca global com foco de teclado e placeholder legível.
 - Legibilidade revisada: textos claros em superfícies escuras, campos com fundo contrastante, cursor visível, foco destacado, fontes mínimas ampliadas e Treeviews com linhas mais altas.
 - Identidade neon aplicada com rosa, magenta, roxo e ciano.
 - Ícone de livro aberto com símbolo de IA e pesquisa, em `logo.svg`, `favicon.ico` e `icon.ico`; o ícone Windows é aplicado pelo Tkinter e pelo PyInstaller.
-- Autenticação local com `scrypt`, recuperação por token local de uso único e validade de 20 minutos.
 - Persistência SQLite com migrações aditivas, backup preventivo antes de alteração estrutural e preservação de dados existentes.
 - Repositório local com upload, download, categorias, extensões permitidas e hash SHA-256.
 - Backup/restauração JSON transacional, lixeira, versões de prompts, coleções, relações, diagnóstico e relatório de integridade.
@@ -30,15 +30,26 @@ REGRESSION_TESTS_OK
 git status --short --branch  # main limpa antes do ajuste documental
 ```
 
-Os testes cobriram integridade SQLite, criação de schema, hash e verificação de senha, token de recuperação, relações entre projetos e prompts, inicialização/encerramento da GUI e regressões de busca e ciclo de vida.
+Os testes cobriram integridade SQLite, preservação de configurações legadas, primeira inicialização sem login, abertura direta da Home, busca, favoritos, exportação de backup, restauração de backup, relações entre projetos e prompts, inicialização/encerramento da GUI e regressões de ciclo de vida.
+
+## Telas removidas e evidências visuais
+
+O fluxo anterior continha controles de sessão no topo da Home, incluindo a saudação **“Olá, Usuário local”** e o botão **“Sair”**. A nova tela mantém a Home, mas abre diretamente com **“OFFLINE • DADOS LOCAIS”**, busca global, **Continuar Trabalhando**, **Favoritos** e **Recentes**.
+
+| Evidência | Arquivo |
+|---|---|
+| Antes — Home com saudação de usuário e botão Sair | [screenshots_before_login.png](screenshots_before_login.png) |
+| Depois — Home direta, sem autenticação | [screenshots_after_home.png](screenshots_after_home.png) |
+
+As imagens foram capturadas em display virtual com resolução de 1280×1024.
 
 ## Publicação e executável
 
 - Branch principal: [main](https://github.com/ericasouzaqa/biblioteca-de-prompts/tree/main)
-- Release: [v1.0.3](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.3)
-- [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.3/BibliotecaDePrompts-Windows.zip)
-- [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.3/BibliotecaDePrompts.exe)
-- Workflow Windows concluído com sucesso na execução da tag `v1.0.3`.
+- Release: [v1.0.4](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.4)
+- [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts-Windows.zip)
+- [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts.exe)
+- Workflow Windows concluído com sucesso na execução da tag `v1.0.4`.
 - ZIP publicado verificado localmente: contém `BibliotecaDePrompts.exe` com 15.165.003 bytes; SHA-256 do ZIP publicado: `ec78e914543f030e81368fd0cf23b53cbe65d6cfd97496a77dfd643f01a5da64`.
 
 ## GitHub Pages
@@ -47,6 +58,6 @@ A landing page responsiva está implementada em `docs/index.html`, com logo, fav
 
 ## Limitações documentadas
 
-- O aplicativo não envia e-mail durante a recuperação offline; o token é exibido localmente.
+- Registros legados de usuário, hash e tokens permanecem no SQLite para preservar dados, mas não são mais lidos nem usados pelo fluxo de execução.
 - GitHub Pages depende de habilitação do recurso e permissões do repositório; a Release do GitHub é o canal oficial e verificável de distribuição.
 - A aplicação completa continua desktop para manter SQLite e dados privados no dispositivo.

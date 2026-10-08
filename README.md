@@ -4,7 +4,7 @@
 
 Aplicação desktop local para organizar prompts, projetos, governança, códigos e arquivos técnicos. Funciona offline, usa SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
-**Versão publicada:** v1.0.3 — reforço de privacidade, acessibilidade e experiência de uso.
+**Versão em produção:** v1.0.4 — uso direto sem autenticação, com preservação de dados.
 
 ## Navegação principal
 
@@ -14,7 +14,7 @@ A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o
 
 ## Funcionalidades
 
-- Login local com senha derivada por `scrypt`.
+- Abertura direta da Home, sem tela de login ou autenticação.
 - Navegação simplificada para Projetos, Prompts, Repositórios, Favoritos, Recentes e Mais.
 - Home orientada à continuidade do trabalho.
 - Busca global de projetos, prompts e repositórios.
@@ -25,7 +25,7 @@ A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o
 
 ## Compatibilidade e migração
 
-Não é necessária nenhuma migração destrutiva para a v1.0.3. As alterações de schema são aditivas e protegidas por backup preventivo; a versão é compatível com dados existentes e com backups existentes.
+Não é necessária nenhuma migração destrutiva para a v1.0.4. A autenticação foi removida do fluxo de uso, mas as tabelas e configurações legadas permanecem intactas no SQLite. As alterações de schema são aditivas e protegidas por backup preventivo; a versão é compatível com dados existentes e com backups existentes.
 
 ## Instalação
 

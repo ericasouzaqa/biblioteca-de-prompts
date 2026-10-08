@@ -9,14 +9,13 @@ import shutil
 import sys
 import sqlite3
 import tkinter as tk
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_NAME = "Biblioteca de Prompts"
-APP_VERSION = "1.0.0"
-BUILD_DATE = "2026-09-12"
-BRAND_TAGLINE = "Conhecimento organizado para criar melhor com IA"
+APP_VERSION = "1.0.4"
+BUILD_DATE = "2026-10-08"
 PALETTE = {
     "bg": "#0B0A16", "surface": "#141322", "surface_raised": "#1D1A31",
     "border": "#332D4F", "border_soft": "#25213B", "text": "#F8F7FF", "muted": "#A9A5BF",
@@ -75,21 +74,6 @@ def resource_path(name):
 
 def now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def hash_password(password, salt=None):
-    salt = salt or secrets.token_bytes(16)
-    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
-    return base64.b64encode(salt + digest).decode()
-
-
-def verify_password(password, stored):
-    try:
-        raw = base64.b64decode(stored.encode())
-        actual = hashlib.scrypt(password.encode(), salt=raw[:16], n=2**14, r=8, p=1)
-        return hmac.compare_digest(actual, raw[16:])
-    except Exception:
-        return False
 
 
 def sha256_file(path):
@@ -499,76 +483,10 @@ class Storage:
 
     def close(self): self.db.close()
 
-    def issue_reset_token(self, email):
-        configured = self.setting("email", "")
-        if not configured or not hmac.compare_digest(configured.lower(), email.strip().lower()):
-            return None
-        self.db.execute("UPDATE password_reset_tokens SET used_at=? WHERE used_at IS NULL AND expires_at < ?", (now(), now()))
-        raw = secrets.token_urlsafe(32); digest = hashlib.sha256(raw.encode()).hexdigest(); expiry = (datetime.now() + timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
-        self.db.execute("INSERT INTO password_reset_tokens(token_hash,expires_at,created_at) VALUES(?,?,?)", (digest, expiry, now())); self.db.commit(); return raw
-
-    def reset_password(self, token, new_password):
-        digest = hashlib.sha256(token.encode()).hexdigest(); row = self.db.execute("SELECT * FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>=? ORDER BY id DESC LIMIT 1", (digest, now())).fetchone()
-        if not row: return False
-        self.set_setting("password_hash", hash_password(new_password)); self.db.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?", (now(), row["id"])); self.db.commit(); return True
-
-
-class LoginFrame(ttk.Frame):
-    def __init__(self, master, on_login):
-        super().__init__(master, padding=(28, 22)); self.master = master; self.storage = master.storage; self.on_login = on_login; self.columnconfigure(0, weight=1); self.rowconfigure(0, weight=1)
-        shell = ttk.Frame(self, style="LoginShell.TFrame", padding=(34, 30)); shell.grid(row=0, column=0, sticky="nsew", padx=14, pady=14); shell.columnconfigure(0, weight=1); shell.rowconfigure(0, weight=1)
-        self.login_bg = None
-        try:
-            self.login_bg = tk.PhotoImage(file=str(resource_path("Fundo_Login_EricaQA_2912x2160.png")))
-            bg = tk.Label(shell, image=self.login_bg, borderwidth=0, highlightthickness=0, bg=PALETTE["bg"]); bg.place(relx=0, rely=0, relwidth=1, relheight=1); bg.lower()
-        except tk.TclError:
-            pass
-        overlay = tk.Frame(shell, bg="#070317", highlightthickness=0); overlay.place(relx=0, rely=0, relwidth=.48, relheight=1); overlay.lower()
-        self.profile_image = None
-        try:
-            self.profile_image = tk.PhotoImage(file=str(resource_path("Foto_Perfil_EricaQA_800x800.png")))
-            avatar = tk.Label(shell, image=self.profile_image, borderwidth=0, highlightthickness=0, bg=PALETTE["bg"]); avatar.grid(row=0, column=0, pady=(0, 8)); avatar.configure(width=112, height=112); avatar.pack_propagate(False)
-        except tk.TclError:
-            ttk.Label(shell, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, pady=(0, 4))
-        ttk.Label(shell, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=1, column=0, pady=(0, 5))
-        ttk.Label(shell, text=BRAND_TAGLINE, style="Subtitle.TLabel").grid(row=2, column=0, pady=(0, 24))
-        box = ttk.LabelFrame(shell, text="  ACESSO PRIVADO  ", style="LoginBox.TLabelframe", padding=(22, 18)); box.grid(row=3, column=0, sticky="ew", padx=10); box.columnconfigure(0, weight=1)
-        ttk.Label(box, text="Entre para acessar sua biblioteca local.", style="Muted.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 14))
-        self.user = self.field(box, 1, "Usuário"); self.password = self.field(box, 3, "Senha", True)
-        ttk.Button(box, text="Entrar  →", style="Primary.TButton", command=self.submit).grid(row=5, column=0, sticky="ew", pady=(18, 4)); self.user.bind("<Return>", lambda _: self.submit()); self.password.bind("<Return>", lambda _: self.submit())
-        ttk.Button(shell, text="Esqueci minha senha", style="Link.TButton", command=self.recover).grid(row=4, column=0, pady=(14, 4))
-        self.after_idle((self.password if self.storage.setting("username") else self.user).focus_set)
-        if not self.storage.setting("username"): ttk.Label(shell, text="Primeiro acesso: crie um usuário e uma senha com pelo menos 6 caracteres.", style="Muted.TLabel").grid(row=5, column=0, pady=(8, 0))
-        ttk.Label(shell, text="OFFLINE • SEUS DADOS FICAM NESTE DISPOSITIVO", style="Security.TLabel").grid(row=6, column=0, pady=(25, 0))
-
-    def field(self, parent, row, label, secret=False):
-        ttk.Label(parent, text=label, style="FieldLabel.TLabel").grid(row=row, column=0, sticky="w", pady=(0, 5)); entry = ttk.Entry(parent, show="•" if secret else "", style="Auth.TEntry"); entry.grid(row=row + 1, column=0, sticky="ew"); return entry
-
-    def submit(self):
-        user, password = self.user.get().strip(), self.password.get(); stored = self.storage.setting("username")
-        if not user or len(password) < 6: messagebox.showwarning(APP_NAME, "Informe usuário e senha com pelo menos 6 caracteres."); return
-        if not stored:
-            self.storage.set_setting("username", user); self.storage.set_setting("password_hash", hash_password(password)); self.on_login(user)
-        elif hmac.compare_digest(stored, user) and verify_password(password, self.storage.setting("password_hash", "")): self.on_login(user)
-        else: messagebox.showerror(APP_NAME, "Usuário ou senha inválidos.")
-
-    def recover(self):
-        email = simpledialog.askstring(APP_NAME, "Informe o e-mail de recuperação configurado:", parent=self)
-        if not email: return
-        token = self.storage.issue_reset_token(email)
-        if not token:
-            messagebox.showerror(APP_NAME, "E-mail não reconhecido ou não configurado. Configure-o na aba Configurações após entrar."); return
-        messagebox.showinfo(APP_NAME, "Modo offline: token temporário gerado. Anote este código e use-o para redefinir a senha:\n\n" + token)
-        new = simpledialog.askstring(APP_NAME, "Cole o token temporário:", parent=self)
-        password = simpledialog.askstring(APP_NAME, "Nova senha:", show="•", parent=self) if new else None
-        if new and password and len(password) >= 6 and self.storage.reset_password(new, password): messagebox.showinfo(APP_NAME, "Senha redefinida. Faça login com a nova senha.")
-        else: messagebox.showerror(APP_NAME, "Token inválido/expirado ou senha muito curta.")
-
-
 class MainApp(ttk.Frame):
-    def __init__(self, master, username, logout):
+    def __init__(self, master):
         super().__init__(master, padding=12)
-        self.master = master; self.storage = master.storage; self.username = username; self.logout = logout
+        self.master = master; self.storage = master.storage
         self.project_map = {}; self.category_map = {}; self.search_var = tk.StringVar(); self.type_filter = tk.StringVar(value="Todos")
         self.tag_filter = tk.StringVar(); self.category_filter = tk.StringVar(value="Todas"); self.favorite_filter = tk.BooleanVar(value=False)
         self.template_filter = tk.BooleanVar(value=False); self.status_filter = tk.StringVar(value="Todos"); self.date_from_filter = tk.StringVar(); self.date_to_filter = tk.StringVar()
@@ -579,15 +497,14 @@ class MainApp(ttk.Frame):
 
     def build(self):
         self.columnconfigure(0, weight=1); self.rowconfigure(4, weight=1)
-        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(2, weight=1)
+        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(1, weight=1)
         self.header_profile = None
         try:
             self.header_profile = tk.PhotoImage(file=str(resource_path("Foto_Perfil_EricaQA_800x800.png")))
             avatar = tk.Label(header, image=self.header_profile, borderwidth=0, highlightthickness=0, bg=PALETTE["surface"]); avatar.grid(row=0, column=0, sticky="w", padx=(0, 10)); avatar.configure(width=42, height=42)
         except tk.TclError: ttk.Label(header, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
         ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=1, sticky="w")
-        ttk.Label(header, text=f"Olá, {self.username}", style="Subtitle.TLabel").grid(row=0, column=2, sticky="w", padx=16)
-        ttk.Button(header, text="Sair", command=self.logout).grid(row=0, column=3)
+        ttk.Label(header, text="OFFLINE • DADOS LOCAIS", style="Subtitle.TLabel").grid(row=0, column=2, sticky="e", padx=16)
         search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 10)); search.columnconfigure(1, weight=1)
         ttk.Label(search, text="Pesquisar projetos, prompts ou repositórios...", style="SearchHint.TLabel").grid(row=0, column=0, padx=(0, 10)); self.search = ttk.Entry(search, textvariable=self.search_var, style="Search.TEntry"); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", self.schedule_refresh)
         ttk.Combobox(search, textvariable=self.type_filter, values=["Todos", "Projetos", "Prompts", "Governança", "Códigos", "Arquivos", "Conhecimento"], state="readonly", width=15).grid(row=0, column=2, padx=5)
@@ -700,7 +617,7 @@ class MainApp(ttk.Frame):
         self.settings = ttk.Frame(self.tabs, padding=18); self.tabs.add(self.settings, text="Configurações")
         ttk.Label(self.settings, text="Configurações e proteção", style="Section.TLabel").pack(anchor="w")
         ttk.Label(self.settings, text="Dados locais, sem envio automático para serviços externos.", style="Muted.TLabel").pack(anchor="w", pady=(4, 18))
-        groups = [("ORGANIZAÇÃO", [("Gerenciar categorias", self.manage_categories), ("Pastas de favoritos", self.manage_favorite_folders)]), ("DADOS E SEGURANÇA", [("Exportar backup seguro", self.export_backup), ("Importar backup seguro", self.import_backup), ("Abrir lixeira", self.open_trash), ("Abrir pasta de dados", lambda: messagebox.showinfo(APP_NAME, str(self.storage.base_dir)))]), ("DIAGNÓSTICO E RELATÓRIOS", [("Relatório geral", self.export_general_report), ("Log de atividades", self.show_activity_log), ("Diagnosticar instalação", self.diagnose_installation), ("Analisar Espaço Utilizado", self.analyze_space), ("Exportar relatório de saúde", self.export_health_report)]), ("CONTA E APLICAÇÃO", [("Alterar senha", self.change_password), ("Configurar e-mail de recuperação", self.configure_email), ("Sobre a aplicação", self.about)])]
+        groups = [("ORGANIZAÇÃO", [("Gerenciar categorias", self.manage_categories), ("Pastas de favoritos", self.manage_favorite_folders)]), ("DADOS E SEGURANÇA", [("Exportar backup seguro", self.export_backup), ("Importar backup seguro", self.import_backup), ("Abrir lixeira", self.open_trash), ("Abrir pasta de dados", lambda: messagebox.showinfo(APP_NAME, str(self.storage.base_dir)))]), ("DIAGNÓSTICO E RELATÓRIOS", [("Relatório geral", self.export_general_report), ("Log de atividades", self.show_activity_log), ("Diagnosticar instalação", self.diagnose_installation), ("Analisar Espaço Utilizado", self.analyze_space), ("Exportar relatório de saúde", self.export_health_report)]), ("APLICAÇÃO", [("Sobre a aplicação", self.about)])]
         for title, actions in groups:
             section = ttk.Frame(self.settings, style="Card.TFrame", padding=(14, 12)); section.pack(fill="x", pady=(0, 10)); ttk.Label(section, text=title, style="Kicker.TLabel").pack(anchor="w", pady=(0, 8)); row = ttk.Frame(section, style="Card.TFrame"); row.pack(fill="x")
             for label, fn in actions: ttk.Button(row, text=label, style="Quiet.TButton", command=fn).pack(side="left", padx=(0, 7))
@@ -1246,13 +1163,6 @@ class MainApp(ttk.Frame):
         if not rid or not messagebox.askyesno(APP_NAME,"Mover arquivo e registro para a lixeira?"):return
         self.storage.trash_row("files", rid); self.refresh_all()
 
-    def configure_email(self):
-        email=simpledialog.askstring(APP_NAME,"E-mail usado para recuperação local:",initialvalue=self.storage.setting("email", ""),parent=self)
-        if email is not None:self.storage.set_setting("email",email.strip()); messagebox.showinfo(APP_NAME,"E-mail salvo localmente. Nenhuma mensagem é enviada sem configurar um provedor externo.")
-    def change_password(self):
-        current=simpledialog.askstring(APP_NAME,"Senha atual:",show="•",parent=self); new=simpledialog.askstring(APP_NAME,"Nova senha:",show="•",parent=self) if current and verify_password(current,self.storage.setting("password_hash","")) else None
-        if new and len(new)>=6:self.storage.set_setting("password_hash",hash_password(new)); messagebox.showinfo(APP_NAME,"Senha alterada.")
-        elif current: messagebox.showerror(APP_NAME,"Senha atual inválida ou nova senha muito curta.")
     def _backup_payload(self):
         files=[]
         for row in self.storage.rows("files"):
@@ -1349,28 +1259,23 @@ class App(tk.Tk):
         super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1200x780"); self.minsize(760,520); self.configure(bg=PALETTE["bg"]); style=ttk.Style(self); style.theme_use("clam")
         try: self.iconbitmap(str(Path(__file__).resolve().parent / "icon.ico"))
         except tk.TclError: pass
-        style.configure(".", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12)); style.configure("TFrame", background=PALETTE["surface"]); style.configure("LoginShell.TFrame", background=PALETTE["bg"]); style.configure("TLabel", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12))
+        style.configure(".", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12)); style.configure("TFrame", background=PALETTE["surface"]); style.configure("TLabel", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12))
         style.configure("TButton", padding=(13, 8), foreground=PALETTE["text"], background=PALETTE["surface_raised"], bordercolor=PALETTE["border_soft"], font=("Segoe UI", 11)); style.map("TButton", background=[("active", PALETTE["border"]), ("pressed", PALETTE["purple"]), ("focus", PALETTE["border"])], foreground=[("disabled", "#6F6A82")], bordercolor=[("focus", PALETTE["focus"])])
         style.configure("Primary.TButton", background=PALETTE["violet"], foreground=PALETTE["text"], font=("Segoe UI", 11, "bold"), padding=(15, 9)); style.map("Primary.TButton", background=[("active", PALETTE["purple"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["purple"])])
         style.configure("Quiet.TButton", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10), borderwidth=0); style.map("Quiet.TButton", background=[("active", PALETTE["surface_raised"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["surface_raised"])], foreground=[("active", PALETTE["text"])])
         style.configure("Danger.TButton", background="#552630", foreground="#FFDADF", font=("Segoe UI", 10, "bold")); style.map("Danger.TButton", background=[("active", PALETTE["danger"]), ("pressed", "#A93F4E"), ("focus", PALETTE["danger"])], foreground=[("active", "#FFFFFF")])
         style.configure("Success.TButton", background="#214B3A", foreground="#B9F5D4", font=("Segoe UI", 10, "bold")); style.map("Success.TButton", background=[("active", PALETTE["success"]), ("pressed", "#2E8B5C")])
-        style.configure("Title.TLabel", font=("Segoe UI", 22, "bold"), foreground=PALETTE["pink"]); style.configure("BrandMark.TLabel", font=("Segoe UI Symbol", 40), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("Hero.TLabel", font=("Segoe UI", 25, "bold"), foreground=PALETTE["text"]); style.configure("Section.TLabel", font=("Segoe UI", 17, "bold"), foreground=PALETTE["text"]); style.configure("Kicker.TLabel", foreground=PALETTE["cyan"], font=("Segoe UI", 9, "bold")); style.configure("Subtitle.TLabel", foreground=PALETTE["muted"], font=("Segoe UI", 12)); style.configure("Muted.TLabel", foreground=PALETTE["muted"], wraplength=760, font=("Segoe UI", 11)); style.configure("CardBody.TLabel", foreground=PALETTE["text"], background=PALETTE["surface_raised"], wraplength=760, font=("Segoe UI", 11)); style.configure("Security.TLabel", font=("Segoe UI", 11, "bold"), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("FieldLabel.TLabel", foreground=PALETTE["text"], font=("Segoe UI", 11, "bold")); style.configure("Metric.TLabel", font=("Segoe UI", 30, "bold"), foreground=PALETTE["pink"], background=PALETTE["surface_raised"]); style.configure("CardLabel.TLabel", foreground=PALETTE["muted"], background=PALETTE["surface_raised"], font=("Segoe UI", 8, "bold")); style.configure("Link.TButton", foreground=PALETTE["cyan"], background=PALETTE["bg"], borderwidth=0, font=("Segoe UI", 11, "underline")); style.map("Link.TButton", foreground=[("active", PALETTE["pink"]), ("focus", PALETTE["pink"])])
+        style.configure("Title.TLabel", font=("Segoe UI", 22, "bold"), foreground=PALETTE["pink"]); style.configure("BrandMark.TLabel", font=("Segoe UI Symbol", 40), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("Hero.TLabel", font=("Segoe UI", 25, "bold"), foreground=PALETTE["text"]); style.configure("Section.TLabel", font=("Segoe UI", 17, "bold"), foreground=PALETTE["text"]); style.configure("Kicker.TLabel", foreground=PALETTE["cyan"], font=("Segoe UI", 9, "bold")); style.configure("Subtitle.TLabel", foreground=PALETTE["muted"], font=("Segoe UI", 12)); style.configure("Muted.TLabel", foreground=PALETTE["muted"], wraplength=760, font=("Segoe UI", 11)); style.configure("CardBody.TLabel", foreground=PALETTE["text"], background=PALETTE["surface_raised"], wraplength=760, font=("Segoe UI", 11)); style.configure("FieldLabel.TLabel", foreground=PALETTE["text"], font=("Segoe UI", 11, "bold")); style.configure("Metric.TLabel", font=("Segoe UI", 30, "bold"), foreground=PALETTE["pink"], background=PALETTE["surface_raised"]); style.configure("CardLabel.TLabel", foreground=PALETTE["muted"], background=PALETTE["surface_raised"], font=("Segoe UI", 8, "bold"));
         style.configure("Card.TFrame", background=PALETTE["surface_raised"]); style.configure("CardHover.TFrame", background="#26213F"); style.configure("Inset.TFrame", background=PALETTE["input"]); style.configure("Hero.TFrame", background=PALETTE["surface"]); style.configure("Toolbar.TFrame", background=PALETTE["surface"]); style.configure("Modal.TFrame", background=PALETTE["surface"]); style.configure("FormHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10)); style.configure("SearchHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10)); style.configure("Search.TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["violet"], lightcolor=PALETTE["violet"], darkcolor=PALETTE["border"], padding=12, font=("Segoe UI", 13)); style.map("Search.TEntry", fieldbackground=[("focus", PALETTE["surface_raised"])], bordercolor=[("focus", PALETTE["pink"])], lightcolor=[("focus", PALETTE["pink"])])
-        style.configure("LoginBox.TLabelframe", background=PALETTE["surface"], foreground=PALETTE["cyan"], bordercolor=PALETTE["border"]); style.configure("LoginBox.TLabelframe.Label", background=PALETTE["surface"], foreground=PALETTE["cyan"], font=("Segoe UI", 11, "bold")); style.configure("Auth.TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=10, font=("Segoe UI", 12)); style.map("Auth.TEntry", fieldbackground=[("focus", PALETTE["input"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
+
         style.configure("TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Segoe UI", 11)); style.map("TEntry", fieldbackground=[("focus", PALETTE["input"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
         style.configure("TCombobox", fieldbackground=PALETTE["input"], background=PALETTE["input"], foreground=PALETTE["text"], arrowcolor=PALETTE["cyan"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Segoe UI", 11)); style.map("TCombobox", fieldbackground=[("readonly", PALETTE["input"]), ("focus", PALETTE["input"])], foreground=[("readonly", PALETTE["text"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
         style.layout("Hidden.TNotebook.Tab", []); style.configure("Hidden.TNotebook", background=PALETTE["bg"], borderwidth=0); style.configure("TNotebook", background=PALETTE["bg"], borderwidth=0, tabmargins=(0, 0, 0, 0)); style.configure("TNotebook.Tab", background=PALETTE["surface"], foreground=PALETTE["muted"], padding=(16, 10), borderwidth=0, lightcolor=PALETTE["surface"], darkcolor=PALETTE["surface"], font=("Segoe UI", 10, "bold")); style.map("TNotebook.Tab", background=[("selected", PALETTE["surface_raised"]), ("active", PALETTE["surface_raised"])], foreground=[("selected", PALETTE["pink"]), ("active", PALETTE["text"])], lightcolor=[("selected", PALETTE["surface_raised"])], darkcolor=[("selected", PALETTE["surface_raised"])])
         style.configure("Treeview", background=PALETTE["surface"], fieldbackground=PALETTE["surface"], foreground=PALETTE["text"], rowheight=40, font=("Segoe UI", 11), borderwidth=0, relief="flat"); style.configure("Treeview.Heading", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10, "bold"), padding=(10, 11), relief="flat", borderwidth=0); style.map("Treeview", background=[("selected", PALETTE["selection"]), ("focus", PALETTE["selection"])], foreground=[("selected", PALETTE["text"])])
-        self.protocol("WM_DELETE_WINDOW",self.quit_app)
-        if self.storage.setting("password_hash"):
-            self.show_login()
-        else:
-            self.login(self.storage.setting("username", "Usuário local"))
-    def clear(self):
-        for w in self.winfo_children(): w.destroy()
-    def show_login(self): self.clear(); LoginFrame(self,self.login).pack(fill="both",expand=True)
-    def login(self,user): self.clear(); MainApp(self,user,self.show_login).pack(fill="both",expand=True)
-    def quit_app(self): self.storage.close(); self.destroy()
+        self.protocol("WM_DELETE_WINDOW", self.quit_app)
+        MainApp(self).pack(fill="both", expand=True)
+    def quit_app(self):
+        self.storage.close()
+        self.destroy()
 
 if __name__ == "__main__": App().mainloop()
