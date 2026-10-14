@@ -9,13 +9,13 @@ import shutil
 import sys
 import sqlite3
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_NAME = "Biblioteca de Prompts"
-APP_VERSION = "1.0.4"
-BUILD_DATE = "2026-10-08"
+APP_VERSION = "1.0.5"
+BUILD_DATE = "2026-10-14"
 PALETTE = {
     "bg": "#0B0A16", "surface": "#141322", "surface_raised": "#1D1A31",
     "border": "#332D4F", "border_soft": "#25213B", "text": "#F8F7FF", "muted": "#A9A5BF",
@@ -507,11 +507,9 @@ class MainApp(ttk.Frame):
         ttk.Label(header, text="OFFLINE • DADOS LOCAIS", style="Subtitle.TLabel").grid(row=0, column=2, sticky="e", padx=16)
         search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 10)); search.columnconfigure(1, weight=1)
         ttk.Label(search, text="Pesquisar projetos, prompts ou repositórios...", style="SearchHint.TLabel").grid(row=0, column=0, padx=(0, 10)); self.search = ttk.Entry(search, textvariable=self.search_var, style="Search.TEntry"); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", self.schedule_refresh)
-        ttk.Combobox(search, textvariable=self.type_filter, values=["Todos", "Projetos", "Prompts", "Governança", "Códigos", "Arquivos", "Conhecimento"], state="readonly", width=15).grid(row=0, column=2, padx=5)
-        ttk.Button(search, text="Filtros", command=self.open_filters).grid(row=0, column=3, padx=5); ttk.Button(search, text="Histórico", command=self.show_search_history).grid(row=0, column=4, padx=5); ttk.Button(search, text="Limpar", command=self.clear_search).grid(row=0, column=5)
         for var in (self.type_filter, self.category_filter, self.favorite_filter, self.template_filter, self.status_filter): var.trace_add("write", lambda *_: self.schedule_refresh())
-        self.filter_summary = ttk.Label(self, text="", style="Muted.TLabel"); self.filter_summary.grid(row=2, column=0, sticky="w", pady=(0, 4))
-        navigation = ttk.Frame(self, style="Toolbar.TFrame"); navigation.grid(row=3, column=0, sticky="ew", pady=(0, 10)); navigation.columnconfigure(6, weight=1)
+        self.filter_summary = ttk.Label(self, text="", style="Muted.TLabel")
+        navigation = ttk.Frame(self, style="Toolbar.TFrame"); navigation.grid(row=2, column=0, sticky="ew", pady=(0, 10)); navigation.columnconfigure(5, weight=1)
         for index, (label, command) in enumerate((("Projetos", lambda: self.tabs.select(self.projects)), ("Prompts", lambda: self.tabs.select(self.prompts)), ("Repositórios", lambda: self.tabs.select(self.repository)), ("Favoritos", self.show_favorites), ("Recentes", self.show_recent))):
             ttk.Button(navigation, text=label, style="Quiet.TButton", command=command).grid(row=0, column=index, padx=(0, 6))
         self.advanced_menu = ttk.Menubutton(navigation, text="Mais", style="Quiet.TButton"); menu = tk.Menu(self.advanced_menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"]); self.advanced_menu.configure(menu=menu)
@@ -520,18 +518,26 @@ class MainApp(ttk.Frame):
         for label, frame in (("Governança", self.tips), ("Wiki", self.knowledge), ("Templates", self.templates), ("Coleções", self.collections_tab_frame), ("Códigos", self.codes), ("Configurações", self.settings)):
             menu.add_command(label=label, command=lambda target=frame: self.tabs.select(target))
         menu.add_separator(); menu.add_command(label="Diagnóstico", command=self.diagnose_installation); menu.add_command(label="Relatórios", command=self.export_general_report); menu.add_command(label="Lixeira", command=self.open_trash)
-        self.advanced_menu.grid(row=0, column=6, sticky="e")
+        menu.add_separator()
+        menu.add_command(label="Filtros de busca", command=self.open_filters)
+        menu.add_command(label="Histórico de buscas", command=self.show_search_history)
+        menu.add_command(label="Limpar busca", command=self.clear_search)
+        type_menu = tk.Menu(menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"])
+        for label, value in (("Tudo", "Todos"), ("Projetos", "Projetos"), ("Prompts", "Prompts"), ("Governança", "Governança"), ("Códigos", "Códigos"), ("Arquivos", "Arquivos"), ("Conhecimento", "Conhecimento")):
+            type_menu.add_command(label=label, command=lambda selected=value: self.set_type_filter(selected))
+        menu.add_cascade(label="Buscar por tipo", menu=type_menu)
+        self.advanced_menu.grid(row=0, column=5, sticky="e")
 
     def dashboard_tab(self):
-        tab = ttk.Frame(self.tabs, padding=(42, 34)); self.dashboard = tab; self.tabs.add(tab, text="Dashboard"); tab.columnconfigure(0, weight=1); tab.rowconfigure(3, weight=1)
+        tab = ttk.Frame(self.tabs, padding=(42, 34)); self.dashboard = tab; self.tabs.add(tab, text="Home"); tab.columnconfigure(0, weight=1); tab.rowconfigure(3, weight=1)
         ttk.Label(tab, text="CONTINUAR TRABALHANDO", style="Kicker.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(tab, text="Retome seu contexto sem procurar de novo.", style="Hero.TLabel").grid(row=1, column=0, sticky="w", pady=(5, 4))
         ttk.Label(tab, text="Seu espaço de trabalho pessoal, focado no próximo passo.", style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 24))
-        self.resume_shell, self.resume_card = self.rounded_card(tab, padding=(26, 24), height=292); self.resume_shell.grid(row=3, column=0, sticky="ew"); self.resume_card.columnconfigure(1, weight=1)
+        self.resume_shell, self.resume_card = self.rounded_card(tab, padding=(26, 16), height=292); self.resume_shell.grid(row=3, column=0, sticky="ew"); self.resume_card.columnconfigure(1, weight=1)
         self.home_fields = {}
         for row, label in enumerate(("Projeto atual", "Onde parei", "Próximo passo", "Último prompt utilizado", "Repositório relacionado", "Última atualização")):
-            ttk.Label(self.resume_card, text=label.upper(), style="CardLabel.TLabel").grid(row=row, column=0, sticky="nw", padx=(0, 28), pady=8); self.home_fields[label] = ttk.Label(self.resume_card, text="—", style="CardBody.TLabel"); self.home_fields[label].grid(row=row, column=1, sticky="w", pady=8)
-        ttk.Button(self.resume_card, text="Continuar  →", style="Primary.TButton", command=self.continue_work).grid(row=6, column=1, sticky="w", pady=(18, 4))
+            ttk.Label(self.resume_card, text=label.upper(), style="CardLabel.TLabel").grid(row=row, column=0, sticky="nw", padx=(0, 28), pady=0); self.home_fields[label] = ttk.Label(self.resume_card, text="—", style="CardBody.TLabel"); self.home_fields[label].grid(row=row, column=1, sticky="w", pady=0)
+        ttk.Button(self.resume_card, text="Continuar  →", style="Primary.TButton", command=self.continue_work).grid(row=6, column=1, sticky="w", pady=(6, 0))
         lower = ttk.Frame(tab); lower.grid(row=4, column=0, sticky="ew", pady=(30, 0)); lower.columnconfigure((0, 1), weight=1)
         fav_shell, fav_card = self.rounded_card(lower, padding=(18, 16)); fav_shell.grid(row=0, column=0, sticky="ew", padx=(0, 12)); recent_shell, recent_card = self.rounded_card(lower, padding=(18, 16)); recent_shell.grid(row=0, column=1, sticky="ew", padx=(12, 0))
         self.home_favorites = ttk.Label(fav_card, text="Favoritos\n—", style="CardBody.TLabel"); self.home_favorites.pack(anchor="w"); self.home_recent = ttk.Label(recent_card, text="Recentes\n—", style="CardBody.TLabel"); self.home_recent.pack(anchor="w")
@@ -570,7 +576,11 @@ class MainApp(ttk.Frame):
 
     def toolbar(self, parent, title, new, edit, delete, extras=()):
         bar = ttk.Frame(parent, style="Toolbar.TFrame"); bar.pack(fill="x", pady=(0, 12)); bar.columnconfigure(0, weight=1); ttk.Label(bar, text=title, style="Section.TLabel").grid(row=0, column=0, sticky="w"); actions = ttk.Frame(bar, style="Toolbar.TFrame"); actions.grid(row=0, column=1, sticky="e")
-        for label, fn in extras: ttk.Button(actions, text=label, style="Quiet.TButton", command=fn).pack(side="left", padx=(5, 0))
+        if extras:
+            more = ttk.Menubutton(actions, text="⋯ Mais ações", style="Quiet.TButton")
+            more_menu = tk.Menu(more, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"])
+            for label, fn in extras: more_menu.add_command(label=label, command=fn)
+            more.configure(menu=more_menu); more.pack(side="left", padx=(5, 0))
         ttk.Button(actions, text="Excluir", style="Danger.TButton", command=delete).pack(side="left", padx=(5, 0)); ttk.Button(actions, text="Editar", style="Quiet.TButton", command=edit).pack(side="left", padx=(5, 0)); ttk.Button(actions, text="＋ Novo", style="Primary.TButton", command=new).pack(side="left")
 
     def project_tab(self):
@@ -630,6 +640,9 @@ class MainApp(ttk.Frame):
 
     def clear_search(self):
         self.search_var.set(""); self.schedule_refresh()
+
+    def set_type_filter(self, value):
+        self.type_filter.set(value); self.schedule_refresh()
 
     def shortcut_new(self, _event=None): self.new_prompt(); return "break"
     def shortcut_save(self, _event=None):
@@ -876,7 +889,7 @@ class MainApp(ttk.Frame):
                 self.storage.db.execute("DELETE FROM trash WHERE id=?", (int(selected[0]),)); self.storage.db.commit(); win.destroy(); self.open_trash()
         ttk.Button(actions, text="Restaurar", style="Success.TButton", command=restore).pack(side="right", padx=4); ttk.Button(actions, text="Excluir permanentemente", style="Danger.TButton", command=remove).pack(side="right", padx=4)
 
-    def form(self, title, fields, values=None):
+    def form(self, title, fields, values=None, action_label="Salvar"):
         if values is not None and not isinstance(values, dict): values = dict(values)
         win = tk.Toplevel(self); win.title(title); win.transient(self); win.grab_set(); win.minsize(560, 420); win.geometry("720x620"); win.configure(bg=PALETTE["bg"])
         outer = ttk.Frame(win, style="Modal.TFrame"); outer.pack(fill="both", expand=True); canvas = tk.Canvas(outer, highlightthickness=0, bg=PALETTE["surface"]); scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview); inner = ttk.Frame(canvas, padding=(24, 20), style="Modal.TFrame"); inner.columnconfigure(1, weight=1); canvas.create_window((0, 0), window=inner, anchor="nw"); canvas.configure(yscrollcommand=scroll.set); canvas.pack(side="left", fill="both", expand=True); scroll.pack(side="right", fill="y"); inner.bind("<Configure>", lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -893,7 +906,7 @@ class MainApp(ttk.Frame):
             for key, w in widgets.items(): result[key] = w.get("1.0", "end-1c") if isinstance(w, tk.Text) else w.get()
             if not result.get(fields[0][0], "").strip(): messagebox.showwarning(APP_NAME, "Preencha o campo principal.", parent=win); return
             win.destroy()
-        actions = ttk.Frame(inner, style="Modal.TFrame"); actions.grid(row=len(fields) + 2, column=0, columnspan=2, sticky="e", pady=(18, 0)); ttk.Button(actions, text="Cancelar", style="Quiet.TButton", command=win.destroy).pack(side="left", padx=(0, 8)); ttk.Button(actions, text="Salvar alterações", style="Primary.TButton", command=save).pack(side="left"); win.bind("<Escape>", lambda _: win.destroy()); self.wait_window(win); return result or None
+        actions = ttk.Frame(inner, style="Modal.TFrame"); actions.grid(row=len(fields) + 2, column=0, columnspan=2, sticky="e", pady=(18, 0)); ttk.Button(actions, text="Cancelar", style="Quiet.TButton", command=win.destroy).pack(side="left", padx=(0, 8)); ttk.Button(actions, text=action_label, style="Primary.TButton", command=save).pack(side="left"); win.bind("<Escape>", lambda _: win.destroy()); self.wait_window(win); return result or None
 
     def category_values(self): return ["(Sem categoria)"] + list(self.category_map.values())
     def category_from_data(self, data): return self.storage.category_id_for(data.get("category_path"))
@@ -902,7 +915,7 @@ class MainApp(ttk.Frame):
 
     def project_fields(self): return [("name","Nome","entry",None),("objective","Objetivo","text",None),("github_repo","Repositório GitHub","entry",None),("repo_link","Link","entry",None),("tool","Ferramenta","entry",None),("status","Status","combo",STATUSES),("last_prompt","Último prompt","entry",None),("last_interaction","Última interação","entry",None),("category_path","Categoria hierárquica","combo",self.category_values()),("tags","Tags (vírgula)","entry",None),("is_template","Template? (Sim/Não)","combo",["Não","Sim"])]
     def edit_project(self):
-        rid=self.selected(self.project_tree); old=self.storage.entity_row("projects",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; data=self.form("Projeto",self.project_fields(),vals)
+        rid=self.selected(self.project_tree); old=self.storage.entity_row("projects",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; data=self.form("Projeto",self.project_fields(),vals, "Alterar" if rid else "Salvar")
         if not data:return
         t=now(); args=(data["name"],data["objective"],data["github_repo"],data["repo_link"],data["tool"],data["status"],data["last_prompt"],data["last_interaction"],self.category_from_data(data),normalize_tags(data["tags"]),self.bool_value(data["is_template"]))
         if rid:self.storage.db.execute("UPDATE projects SET name=?,objective=?,github_repo=?,repo_link=?,tool=?,status=?,last_prompt=?,last_interaction=?,category_id=?,tags=?,is_template=?,edit_count=edit_count+1,updated_at=? WHERE id=?",(*args,t,rid)); action="edição"; item_id=rid
@@ -912,7 +925,7 @@ class MainApp(ttk.Frame):
 
     def prompt_fields(self): return [("name","Nome","entry",None),("category_path","Categoria hierárquica","combo",self.category_values()),("project_name","Projeto","combo",["(Sem projeto)"]+list(self.project_map.values())),("tool","Ferramenta","combo",PROMPT_TOOLS),("status","Status","combo",CONTENT_STATUSES),("objective","Objetivo","entry",None),("trigger","Gatilho","entry",None),("when_to_use","Quando usar","text",None),("content","Prompt completo","text",None),("expected_result","Resultado esperado","text",None),("notes","Observações","text",None),("tags","Tags (vírgula)","entry",None),("is_template","Template? (Sim/Não)","combo",["Não","Sim"])]
     def edit_prompt(self):
-        rid=self.selected(self.prompt_tree); old=self.storage.entity_row("prompts",rid) if rid else None; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); vals["category_path"]=self.category_map.get(vals.get("category_id"),vals.get("category") or "(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Prompt",self.prompt_fields(),vals)
+        rid=self.selected(self.prompt_tree); old=self.storage.entity_row("prompts",rid) if rid else None; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); vals["category_path"]=self.category_map.get(vals.get("category_id"),vals.get("category") or "(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Prompt",self.prompt_fields(),vals, "Alterar" if rid else "Salvar")
         if not data:return
         pid=next((k for k,v in self.project_map.items() if v==data["project_name"]),None); cid=self.category_from_data(data); category=self.category_map.get(cid,data["category_path"] if data["category_path"]!="(Sem categoria)" else ""); t=now(); args=(data["name"],category,cid,pid,data["tool"],data["status"],data["objective"],data["trigger"],data["when_to_use"],data["content"],data["expected_result"],data["notes"],normalize_tags(data["tags"]),self.bool_value(data["is_template"]))
         if rid:self.storage.add_prompt_version(rid,old); self.storage.db.execute("UPDATE prompts SET name=?,category=?,category_id=?,project_id=?,tool=?,status=?,objective=?,trigger=?,when_to_use=?,content=?,expected_result=?,notes=?,tags=?,is_template=?,edit_count=edit_count+1,updated_at=? WHERE id=?",(*args,t,rid)); action="edição"; item_id=rid
@@ -922,7 +935,7 @@ class MainApp(ttk.Frame):
 
     def tip_fields(self): return [("title","Título","entry",None),("category_path","Categoria hierárquica","combo",self.category_values()),("status","Status","combo",CONTENT_STATUSES),("when_to_use","Quando usar","text",None),("explanation","Explicação","text",None),("content","Prompt copiável","text",None),("tags","Tags (vírgula)","entry",None),("is_template","Template? (Sim/Não)","combo",["Não","Sim"])]
     def edit_tip(self):
-        rid=self.selected(self.tip_tree); old=self.storage.entity_row("tips",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),vals.get("category") or "(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Governança",self.tip_fields(),vals)
+        rid=self.selected(self.tip_tree); old=self.storage.entity_row("tips",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),vals.get("category") or "(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Governança",self.tip_fields(),vals, "Alterar" if rid else "Salvar")
         if not data:return
         cid=self.category_from_data(data); category=self.category_map.get(cid,data["category_path"] if data["category_path"]!="(Sem categoria)" else ""); t=now(); args=(data["title"],category,cid,data["status"],data["when_to_use"],data["explanation"],data["content"],normalize_tags(data["tags"]),self.bool_value(data["is_template"]))
         if rid:self.storage.db.execute("UPDATE tips SET title=?,category=?,category_id=?,status=?,when_to_use=?,explanation=?,content=?,tags=?,is_template=?,edit_count=edit_count+1,updated_at=? WHERE id=?",(*args,t,rid)); action="edição"; item_id=rid
@@ -932,7 +945,7 @@ class MainApp(ttk.Frame):
 
     def code_fields(self): return [("name","Nome","entry",None),("language","Linguagem","entry",None),("project_name","Projeto","combo",["(Sem projeto)"]+list(self.project_map.values())),("category_path","Categoria hierárquica","combo",self.category_values()),("purpose","Finalidade","text",None),("content","Código","text",None),("tags","Tags (vírgula)","entry",None),("notes","Observações","text",None),("is_template","Template? (Sim/Não)","combo",["Não","Sim"])]
     def edit_code(self):
-        rid=self.selected(self.code_tree); old=self.storage.entity_row("codes",rid) if rid else None; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; data=self.form("Código",self.code_fields(),vals)
+        rid=self.selected(self.code_tree); old=self.storage.entity_row("codes",rid) if rid else None; vals=dict(old) if old else {}; vals["project_name"]=self.project_map.get(vals.get("project_id"),"(Sem projeto)"); vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; data=self.form("Código",self.code_fields(),vals, "Alterar" if rid else "Salvar")
         if not data:return
         pid=next((k for k,v in self.project_map.items() if v==data["project_name"]),None); t=now(); args=(data["name"],data["language"],pid,self.category_from_data(data),data["purpose"],data["content"],normalize_tags(data["tags"]),data["notes"],self.bool_value(data["is_template"]))
         if rid:self.storage.db.execute("UPDATE codes SET name=?,language=?,project_id=?,category_id=?,purpose=?,content=?,tags=?,notes=?,is_template=?,edit_count=edit_count+1,updated_at=? WHERE id=?",(*args,t,rid)); action="edição"; item_id=rid
@@ -942,7 +955,7 @@ class MainApp(ttk.Frame):
 
     def knowledge_fields(self): return [("title","Título","entry",None),("category_path","Categoria hierárquica","combo",self.category_values()),("status","Status","combo",CONTENT_STATUSES),("content","Conteúdo","text",None),("tags","Tags (vírgula)","entry",None),("is_template","Template? (Sim/Não)","combo",["Não","Sim"])]
     def edit_knowledge(self):
-        rid=self.selected(self.knowledge_tree); old=self.storage.entity_row("knowledge",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Conhecimento",self.knowledge_fields(),vals)
+        rid=self.selected(self.knowledge_tree); old=self.storage.entity_row("knowledge",rid) if rid else None; vals=dict(old) if old else {}; vals["category_path"]=self.category_map.get(vals.get("category_id"),"(Sem categoria)"); vals["is_template"]="Sim" if vals.get("is_template") else "Não"; vals["status"]=vals.get("status") or "Rascunho"; data=self.form("Conhecimento",self.knowledge_fields(),vals, "Alterar" if rid else "Salvar")
         if not data:return
         t=now(); args=(data["title"],data["content"],self.category_from_data(data),normalize_tags(data["tags"]),self.bool_value(data["is_template"]),data["status"])
         if rid:self.storage.db.execute("UPDATE knowledge SET title=?,content=?,category_id=?,tags=?,is_template=?,status=?,edit_count=edit_count+1,updated_at=? WHERE id=?",(*args,t,rid)); action="edição"; item_id=rid
@@ -1052,12 +1065,12 @@ class MainApp(ttk.Frame):
         self.tabs.select(self.dashboard); self.refresh_home_context()
 
     def new_collection(self):
-        data=self.form("Coleção",[("name","Nome","entry",None),("catalog","Catálogo","combo",COLLECTION_CATALOGS),("description","Descrição","text",None)],{"catalog":"Geral"})
+        data=self.form("Coleção",[("name","Nome","entry",None),("catalog","Catálogo","combo",COLLECTION_CATALOGS),("description","Descrição","text",None)],{"catalog":"Geral"}, "Salvar")
         if data:self.storage.db.execute("INSERT INTO collections(name,catalog,description,created_at,updated_at) VALUES(?,?,?,?,?)",(data["name"],data["catalog"],data["description"],now(),now()));self.storage.log_activity("criação","collections",self.storage.db.execute("SELECT last_insert_rowid()").fetchone()[0],data["name"],commit=False);self.storage.db.commit();self.refresh_all()
     def edit_collection(self):
         rid=self.selected(self.collection_tree);row=self.storage.db.execute("SELECT * FROM collections WHERE id=?",(rid,)).fetchone() if rid else None
         if not row:return
-        data=self.form("Coleção",[("name","Nome","entry",None),("catalog","Catálogo","combo",COLLECTION_CATALOGS),("description","Descrição","text",None)],row)
+        data=self.form("Coleção",[("name","Nome","entry",None),("catalog","Catálogo","combo",COLLECTION_CATALOGS),("description","Descrição","text",None)],row, "Alterar")
         if data:self.storage.db.execute("UPDATE collections SET name=?,catalog=?,description=?,updated_at=? WHERE id=?",(data["name"],data["catalog"],data["description"],now(),rid));self.storage.db.commit();self.refresh_all()
     def delete_collection(self):
         rid=self.selected(self.collection_tree)

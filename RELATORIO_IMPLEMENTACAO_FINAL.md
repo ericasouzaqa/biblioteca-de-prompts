@@ -2,7 +2,7 @@
 
 ## Resultado
 
-A versão de produção em validação é **v1.0.4** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
+A versão de produção em validação é **v1.0.5** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
 
 ## Alterações confirmadas
 
@@ -46,10 +46,10 @@ As imagens foram capturadas em display virtual com resolução de 1280×1024.
 ## Publicação e executável
 
 - Branch principal: [main](https://github.com/ericasouzaqa/biblioteca-de-prompts/tree/main)
-- Release: [v1.0.4](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.4)
+- Release base: [v1.0.4](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.4)
 - [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts-Windows.zip)
 - [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts.exe)
-- Workflow Windows concluído com sucesso na execução da tag `v1.0.4`.
+- Workflow Windows da versão base v1.0.4 concluído com sucesso; o build v1.0.5 será disparado após a publicação desta revisão.
 - O workflow confirmou o ZIP publicado com 14.911.407 bytes e o executável com 15.166.408 bytes. SHA-256 informado pela API do GitHub: ZIP `9e9e21552f328d2826c649f4b7dd3e71abf28bd8a03969b565db13504c05ded7`; EXE `5c11000dfabf725406e0cd12b7134a9b7b6402f49a63ef66ce0ffd82a8ee0656`.
 
 ## GitHub Pages
@@ -61,3 +61,32 @@ A landing page responsiva está implementada em `docs/index.html`, com logo, fav
 - Registros legados de usuário, hash e tokens permanecem no SQLite para preservar dados, mas não são mais lidos nem usados pelo fluxo de execução.
 - GitHub Pages depende de habilitação do recurso e permissões do repositório; a Release do GitHub é o canal oficial e verificável de distribuição.
 - A aplicação completa continua desktop para manter SQLite e dados privados no dispositivo.
+
+
+## Revisão UX/UI — v1.0.5
+
+A revisão foi executada sem criar funcionalidades, módulos, métricas ou dashboards novos. O objetivo foi reduzir atrito e priorizar a retomada de trabalho.
+
+### Simplificações aplicadas
+
+- Home mantida focada em busca global, **Continuar Trabalhando**, Favoritos e Recentes.
+- Removidos da barra de busca os controles avançados **Filtros**, **Histórico**, **Limpar** e seleção de tipo.
+- Esses recursos permanecem acessíveis em **Mais**, incluindo busca por tipo, para preservar compatibilidade funcional.
+- Navegação principal mantida somente com **Projetos**, **Prompts**, **Repositórios**, **Favoritos**, **Recentes** e **Mais**.
+- Governança, Wiki, Templates, Coleções, Códigos, Configurações, Diagnóstico, Relatórios e Lixeira permanecem disponíveis em **Mais**.
+- Ações secundárias das toolbars foram agrupadas em **⋯ Mais ações**: relações, duplicação, exportação, histórico, cópia, favoritos e demais operações específicas.
+- Formulários agora exibem **Salvar + Cancelar** na criação e **Alterar + Cancelar** na edição.
+- A Home deixou de apresentar o rótulo de Dashboard e passou a ser identificada como **Home**.
+- O cartão de continuidade foi ajustado para exibir todos os campos obrigatórios e o botão **Continuar** na resolução padrão.
+- Corrigida a importação de `timedelta`, necessária para os relatórios internos existentes.
+
+### Evidências visuais
+
+- [Antes da revisão UX/UI](screenshots_before_ux_review.png)
+- [Depois da revisão UX/UI](screenshots_after_ux_review.png)
+
+As capturas foram verificadas em ambiente virtual com resolução de 1280×1024 e mostram a redução de controles na busca, a navegação concentrada e o cartão de continuidade completo.
+
+### Validação adicional
+
+Novo teste automatizado: `test_ux_review.py`, cobrindo busca sem controles avançados expostos, navegação principal e itens do menu Mais, ações secundárias dentro de **⋯ Mais ações**, botões **Salvar/Cancelar**, botões **Alterar/Cancelar** e seleção de tipo preservada no menu.
