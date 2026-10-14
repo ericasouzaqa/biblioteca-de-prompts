@@ -46,11 +46,11 @@ As imagens foram capturadas em display virtual com resolução de 1280×1024.
 ## Publicação e executável
 
 - Branch principal: [main](https://github.com/ericasouzaqa/biblioteca-de-prompts/tree/main)
-- Release base: [v1.0.4](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.4)
-- [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts-Windows.zip)
-- [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.4/BibliotecaDePrompts.exe)
-- Workflow Windows da versão base v1.0.4 concluído com sucesso; o build v1.0.5 será disparado após a publicação desta revisão.
-- O workflow confirmou o ZIP publicado com 14.911.407 bytes e o executável com 15.166.408 bytes. SHA-256 informado pela API do GitHub: ZIP `9e9e21552f328d2826c649f4b7dd3e71abf28bd8a03969b565db13504c05ded7`; EXE `5c11000dfabf725406e0cd12b7134a9b7b6402f49a63ef66ce0ffd82a8ee0656`.
+- Release: [v1.0.5](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.0.5)
+- [Baixar ZIP portátil para Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.5/BibliotecaDePrompts-Windows.zip)
+- [Baixar executável Windows](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.0.5/BibliotecaDePrompts.exe)
+- Workflow Windows da versão v1.0.5 concluído com sucesso após reexecução; PyInstaller, empacotamento e publicação de assets foram aprovados.
+- A Release v1.0.5 publicou o ZIP com 14.911.744 bytes e o executável com 15.166.519 bytes. SHA-256 informado pela API do GitHub: ZIP `9dc1de4042d8764f8f9846f9c7dc4e7283ac061891b28567b91e122504caadaf`; EXE `c7cc67f1dd4bbe64758c3d3af9d4e77ca9265647e031f23e15e9f0e4ebaa4b3a`.
 
 ## GitHub Pages
 
