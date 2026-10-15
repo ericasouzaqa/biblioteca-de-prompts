@@ -128,3 +128,12 @@ PRODUCTION_MODE_TESTS_OK
 UX_REVIEW_TESTS_OK
 git diff --check
 ```
+
+
+### Publicação v1.1.0
+
+- [Release v1.1.0 — Redesign Premium](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.1.0)
+- [Executável Windows portátil](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.1.0/BibliotecaDePrompts.exe)
+- [ZIP Windows portátil](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.1.0/BibliotecaDePrompts-Windows.zip)
+
+O workflow Windows foi aprovado em todas as etapas. O ZIP publicado possui 14.925.537 bytes e SHA-256 `f3c4a10678f2685945da86b7a2288b42b8c77209244e77b16cdf8eeaaabb7c23`. O executável possui 15.272.126 bytes e SHA-256 `d971bc3945b85e24eb9f5b9ca4a049ba0c694b02d5d743d4b3de4ddac348d48b`.
