@@ -20,12 +20,15 @@ with tempfile.TemporaryDirectory() as tmp:
     search_frame = main.search.master
     assert not any(isinstance(child, ttk.Button) for child in search_frame.winfo_children())
     assert main.search.winfo_exists()
+    stamp = app.now()
+    main.storage.db.execute("INSERT INTO prompts(name,category,tool,tags,usage_count,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", ("Card de validação", "QA", "GPT", "teste, ux", 7, "conteúdo", stamp, stamp))
+    main.storage.db.commit(); main.refresh_all(); window.update_idletasks()
+    assert any("text" in child.keys() and child.cget("text") == "Card de validação" for child in descendants(main.prompt_cards_frame))
 
-    navigation = main.grid_slaves(row=2, column=0)[0]
-    labels = {child.cget("text") for child in navigation.winfo_children() if "text" in child.keys()}
-    assert {"Projetos", "Prompts", "Repositórios", "Favoritos", "Recentes", "Mais"}.issubset(labels)
+    labels = {child.cget("text") for child in main.sidebar.winfo_children() if "text" in child.keys()}
+    assert {"✎  Prompts", "▣  Projetos", "★  Favoritos", "◷  Recentes", "↗  Repositórios", "⚙  Configurações"}.issubset(labels)
 
-    more = next(child for child in navigation.winfo_children() if isinstance(child, ttk.Menubutton))
+    more = main.advanced_menu
     menu = window.nametowidget(more.cget("menu"))
     menu_labels = {menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) != "separator"}
     assert {"Governança", "Wiki", "Templates", "Coleções", "Códigos", "Configurações", "Diagnóstico", "Relatórios", "Lixeira", "Filtros de busca", "Histórico de buscas", "Limpar busca"}.issubset(menu_labels)

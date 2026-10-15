@@ -14,15 +14,15 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_NAME = "Biblioteca de Prompts"
-APP_VERSION = "1.0.5"
-BUILD_DATE = "2026-10-14"
+APP_VERSION = "1.1.0"
+BUILD_DATE = "2026-10-15"
 PALETTE = {
-    "bg": "#0B0A16", "surface": "#141322", "surface_raised": "#1D1A31",
-    "border": "#332D4F", "border_soft": "#25213B", "text": "#F8F7FF", "muted": "#A9A5BF",
-    "pink": "#F08BCE", "magenta": "#D96BB8", "purple": "#A78BFA",
-    "violet": "#7C5CFC", "cyan": "#8ED8E5", "input": "#211D35",
-    "focus": "#A78BFA", "selection": "#51419B", "success": "#55C58A",
-    "danger": "#E97883", "warning": "#F0B86E",
+    "bg": "#0F1117", "sidebar": "#161A23", "surface": "#1D2330",
+    "surface_raised": "#222A39", "border": "#2A3344", "border_soft": "#202735",
+    "text": "#FFFFFF", "muted": "#A8B3C7", "pink": "#818CF8", "magenta": "#6366F1",
+    "purple": "#818CF8", "violet": "#6366F1", "cyan": "#A8B3C7", "input": "#171D28",
+    "focus": "#818CF8", "selection": "#3B4370", "success": "#22C55E",
+    "danger": "#EF4444", "warning": "#F59E0B",
 }
 def application_dir():
     return Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
@@ -136,7 +136,7 @@ class Storage:
         """)
         additions = {
             "projects": {"tags": "TEXT", "category_id": "INTEGER", "is_template": "INTEGER DEFAULT 0", "favorite": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0"},
-            "prompts": {"category_id": "INTEGER", "is_template": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0", "status": "TEXT DEFAULT 'Rascunho'"},
+            "prompts": {"category_id": "INTEGER", "usage_count": "INTEGER DEFAULT 0", "is_template": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0", "status": "TEXT DEFAULT 'Rascunho'"},
             "tips": {"tags": "TEXT", "category_id": "INTEGER", "is_template": "INTEGER DEFAULT 0", "favorite": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0", "status": "TEXT DEFAULT 'Rascunho'"},
             "codes": {"category_id": "INTEGER", "is_template": "INTEGER DEFAULT 0", "favorite": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0"},
             "files": {"category_id": "INTEGER", "favorite": "INTEGER DEFAULT 0", "favorite_folder_id": "INTEGER", "pinned": "INTEGER DEFAULT 0", "last_viewed_at": "TEXT", "edit_count": "INTEGER DEFAULT 0"},
@@ -496,37 +496,42 @@ class MainApp(ttk.Frame):
         for sequence, command in shortcuts.items(): self.bind_all(sequence, command)
 
     def build(self):
-        self.columnconfigure(0, weight=1); self.rowconfigure(4, weight=1)
-        header = ttk.Frame(self); header.grid(row=0, column=0, sticky="ew", pady=(0, 8)); header.columnconfigure(1, weight=1)
-        self.header_profile = None
-        try:
-            self.header_profile = tk.PhotoImage(file=str(resource_path("Foto_Perfil_EricaQA_800x800.png")))
-            avatar = tk.Label(header, image=self.header_profile, borderwidth=0, highlightthickness=0, bg=PALETTE["surface"]); avatar.grid(row=0, column=0, sticky="w", padx=(0, 10)); avatar.configure(width=42, height=42)
-        except tk.TclError: ttk.Label(header, text="▰", style="BrandMark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
-        ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=1, sticky="w")
-        ttk.Label(header, text="OFFLINE • DADOS LOCAIS", style="Subtitle.TLabel").grid(row=0, column=2, sticky="e", padx=16)
-        search = ttk.Frame(self); search.grid(row=1, column=0, sticky="ew", pady=(0, 10)); search.columnconfigure(1, weight=1)
-        ttk.Label(search, text="Pesquisar projetos, prompts ou repositórios...", style="SearchHint.TLabel").grid(row=0, column=0, padx=(0, 10)); self.search = ttk.Entry(search, textvariable=self.search_var, style="Search.TEntry"); self.search.grid(row=0, column=1, sticky="ew"); self.search.bind("<KeyRelease>", self.schedule_refresh)
+        self.columnconfigure(0, weight=1); self.rowconfigure(0, weight=1)
+        shell = ttk.Frame(self); shell.grid(row=0, column=0, sticky="nsew"); shell.columnconfigure(1, weight=1); shell.rowconfigure(0, weight=1)
+        sidebar = ttk.Frame(shell, style="Sidebar.TFrame", padding=(18, 22)); sidebar.grid(row=0, column=0, sticky="nsew"); sidebar.rowconfigure(7, weight=1)
+        self.sidebar = sidebar
+        ttk.Label(sidebar, text="✦  Biblioteca", style="SidebarBrand.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 30))
+        nav_items = (("✎  Prompts", lambda: self.tabs.select(self.prompts)), ("▣  Projetos", lambda: self.tabs.select(self.projects)), ("★  Favoritos", self.show_favorites), ("◷  Recentes", self.show_recent), ("↗  Repositórios", lambda: self.tabs.select(self.repository)))
+        for row, (label, command) in enumerate(nav_items, 1):
+            ttk.Button(sidebar, text=label, style="Sidebar.TButton", command=command).grid(row=row, column=0, sticky="ew", pady=3)
+        ttk.Separator(sidebar).grid(row=6, column=0, sticky="ew", pady=(18, 12))
+        ttk.Button(sidebar, text="⚙  Configurações", style="Sidebar.TButton", command=lambda: self.tabs.select(self.settings)).grid(row=8, column=0, sticky="ew", pady=3)
+        ttk.Label(sidebar, text="OFFLINE • LOCAL", style="SidebarFoot.TLabel").grid(row=9, column=0, sticky="sw", pady=(22, 0))
+
+        content = ttk.Frame(shell, style="Content.TFrame", padding=(34, 28)); content.grid(row=0, column=1, sticky="nsew"); content.columnconfigure(0, weight=1); content.rowconfigure(3, weight=1)
+        self.content = content
+        header = ttk.Frame(content, style="Content.TFrame"); header.grid(row=0, column=0, sticky="ew", pady=(0, 22)); header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Biblioteca de Prompts", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Organize seu contexto. Retome seu trabalho.", style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(5, 0))
+        self.new_prompt_button = ttk.Button(header, text="＋ Novo Prompt", style="Primary.TButton", command=self.new_prompt); self.new_prompt_button.grid(row=0, column=1, rowspan=2, sticky="e")
+        search = ttk.Frame(content, style="Content.TFrame"); search.grid(row=1, column=0, sticky="ew", pady=(0, 16)); search.columnconfigure(0, weight=1)
+        ttk.Label(search, text="⌕", style="SearchIcon.TLabel").grid(row=0, column=0, sticky="w", padx=(14, 0))
+        self.search = ttk.Entry(search, textvariable=self.search_var, style="Search.TEntry"); self.search.grid(row=0, column=1, sticky="ew", padx=(8, 0)); search.columnconfigure(1, weight=1)
+        self.filter_summary = ttk.Label(content, text="", style="Muted.TLabel")
+        self.advanced_menu = ttk.Menubutton(search, text="•••", style="Quiet.TButton"); self.advanced_menu.grid(row=0, column=2, padx=(8, 0))
+        menu = tk.Menu(self.advanced_menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"]); self.advanced_menu.configure(menu=menu)
         for var in (self.type_filter, self.category_filter, self.favorite_filter, self.template_filter, self.status_filter): var.trace_add("write", lambda *_: self.schedule_refresh())
-        self.filter_summary = ttk.Label(self, text="", style="Muted.TLabel")
-        navigation = ttk.Frame(self, style="Toolbar.TFrame"); navigation.grid(row=2, column=0, sticky="ew", pady=(0, 10)); navigation.columnconfigure(5, weight=1)
-        for index, (label, command) in enumerate((("Projetos", lambda: self.tabs.select(self.projects)), ("Prompts", lambda: self.tabs.select(self.prompts)), ("Repositórios", lambda: self.tabs.select(self.repository)), ("Favoritos", self.show_favorites), ("Recentes", self.show_recent))):
-            ttk.Button(navigation, text=label, style="Quiet.TButton", command=command).grid(row=0, column=index, padx=(0, 6))
-        self.advanced_menu = ttk.Menubutton(navigation, text="Mais", style="Quiet.TButton"); menu = tk.Menu(self.advanced_menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"]); self.advanced_menu.configure(menu=menu)
-        self.tabs = ttk.Notebook(self, style="Hidden.TNotebook"); self.tabs.grid(row=4, column=0, sticky="nsew")
+        self.search.bind("<KeyRelease>", self.schedule_refresh)
+        self.tabs = ttk.Notebook(content, style="Hidden.TNotebook"); self.tabs.grid(row=3, column=0, sticky="nsew")
         self.dashboard_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.knowledge_tab(); self.template_tab(); self.collection_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
         for label, frame in (("Governança", self.tips), ("Wiki", self.knowledge), ("Templates", self.templates), ("Coleções", self.collections_tab_frame), ("Códigos", self.codes), ("Configurações", self.settings)):
             menu.add_command(label=label, command=lambda target=frame: self.tabs.select(target))
-        menu.add_separator(); menu.add_command(label="Diagnóstico", command=self.diagnose_installation); menu.add_command(label="Relatórios", command=self.export_general_report); menu.add_command(label="Lixeira", command=self.open_trash)
-        menu.add_separator()
-        menu.add_command(label="Filtros de busca", command=self.open_filters)
-        menu.add_command(label="Histórico de buscas", command=self.show_search_history)
-        menu.add_command(label="Limpar busca", command=self.clear_search)
+        menu.add_separator(); menu.add_command(label="Diagnóstico", command=self.diagnose_installation); menu.add_command(label="Relatórios", command=self.export_general_report); menu.add_command(label="Lixeira", command=self.open_trash); menu.add_separator(); menu.add_command(label="Filtros de busca", command=self.open_filters); menu.add_command(label="Histórico de buscas", command=self.show_search_history); menu.add_command(label="Limpar busca", command=self.clear_search)
         type_menu = tk.Menu(menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"])
         for label, value in (("Tudo", "Todos"), ("Projetos", "Projetos"), ("Prompts", "Prompts"), ("Governança", "Governança"), ("Códigos", "Códigos"), ("Arquivos", "Arquivos"), ("Conhecimento", "Conhecimento")):
             type_menu.add_command(label=label, command=lambda selected=value: self.set_type_filter(selected))
         menu.add_cascade(label="Buscar por tipo", menu=type_menu)
-        self.advanced_menu.grid(row=0, column=5, sticky="e")
+        self.tabs.select(self.prompts)
 
     def dashboard_tab(self):
         tab = ttk.Frame(self.tabs, padding=(42, 34)); self.dashboard = tab; self.tabs.add(tab, text="Home"); tab.columnconfigure(0, weight=1); tab.rowconfigure(3, weight=1)
@@ -574,14 +579,15 @@ class MainApp(ttk.Frame):
         for c, h in zip(cols, heads): tree.heading(c, text=h); tree.column(c, width=150, minwidth=90, anchor="w", stretch=True)
         tree.grid(row=0, column=0, sticky="nsew"); vertical = ttk.Scrollbar(frame, orient="vertical", command=tree.yview); vertical.grid(row=0, column=1, sticky="ns"); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview); horizontal.grid(row=1, column=0, sticky="ew"); tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set); return frame, tree
 
-    def toolbar(self, parent, title, new, edit, delete, extras=()):
+    def toolbar(self, parent, title, new, edit, delete, extras=(), new_label="＋ Novo", show_new=True):
         bar = ttk.Frame(parent, style="Toolbar.TFrame"); bar.pack(fill="x", pady=(0, 12)); bar.columnconfigure(0, weight=1); ttk.Label(bar, text=title, style="Section.TLabel").grid(row=0, column=0, sticky="w"); actions = ttk.Frame(bar, style="Toolbar.TFrame"); actions.grid(row=0, column=1, sticky="e")
         if extras:
             more = ttk.Menubutton(actions, text="⋯ Mais ações", style="Quiet.TButton")
             more_menu = tk.Menu(more, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"])
             for label, fn in extras: more_menu.add_command(label=label, command=fn)
             more.configure(menu=more_menu); more.pack(side="left", padx=(5, 0))
-        ttk.Button(actions, text="Excluir", style="Danger.TButton", command=delete).pack(side="left", padx=(5, 0)); ttk.Button(actions, text="Editar", style="Quiet.TButton", command=edit).pack(side="left", padx=(5, 0)); ttk.Button(actions, text="＋ Novo", style="Primary.TButton", command=new).pack(side="left")
+        ttk.Button(actions, text="Excluir", style="Danger.TButton", command=delete).pack(side="left", padx=(5, 0)); ttk.Button(actions, text="Editar", style="Quiet.TButton", command=edit).pack(side="left", padx=(5, 0));
+        if show_new: ttk.Button(actions, text=new_label, style="Primary.TButton", command=new).pack(side="left")
 
     def project_tab(self):
         self.projects = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.projects, text="Projetos")
@@ -589,9 +595,38 @@ class MainApp(ttk.Frame):
         frame, self.project_tree = self.tree(self.projects, ("pin","fav","template","name","status","category","tags"), ("📌","★","T","Projeto","Status","Categoria","Tags")); frame.pack(fill="both", expand=True); self.project_tree.bind("<Double-1>", lambda _: self.edit_project())
 
     def prompt_tab(self):
-        self.prompts = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.prompts, text="Prompts")
-        self.toolbar(self.prompts, "Biblioteca de Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Relações", lambda: self.manage_relationships("prompts", self.prompt_tree)), ("Duplicar", lambda: self.duplicate_selected("prompts", self.prompt_tree)), ("Exportar coleção", lambda: self.export_collection("prompts", self.prompt_tree)), ("Histórico", self.show_prompt_history), ("Copiar", self.copy_prompt), ("★", lambda: self.toggle_flag("prompts", self.prompt_tree, "favorite")), ("📌", lambda: self.toggle_flag("prompts", self.prompt_tree, "pinned"))])
-        frame, self.prompt_tree = self.tree(self.prompts, ("pin","fav","template","name","status","category","project","tool","tags"), ("📌","★","T","Nome","Status","Categoria","Projeto","Ferramenta","Tags")); frame.pack(fill="both", expand=True); self.prompt_tree.bind("<Double-1>", lambda _: self.edit_prompt())
+        self.prompts = ttk.Frame(self.tabs, padding=(0, 4)); self.tabs.add(self.prompts, text="Prompts")
+        self.toolbar(self.prompts, "Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Relações", lambda: self.manage_relationships("prompts", self.prompt_tree)), ("Duplicar", lambda: self.duplicate_selected("prompts", self.prompt_tree)), ("Exportar coleção", lambda: self.export_collection("prompts", self.prompt_tree)), ("Histórico", self.show_prompt_history), ("Copiar", self.copy_prompt), ("★ Favoritar", lambda: self.toggle_flag("prompts", self.prompt_tree, "favorite")), ("📌 Fixar", lambda: self.toggle_flag("prompts", self.prompt_tree, "pinned"))], "＋ Novo Prompt", False)
+        frame, self.prompt_tree = self.tree(self.prompts, ("pin","fav","template","name","status","category","project","tool","tags"), ("📌","★","T","Nome","Status","Categoria","Projeto","Ferramenta","Tags")); self.prompt_tree.bind("<Double-1>", lambda _: self.edit_prompt())
+        self.prompt_cards_canvas = tk.Canvas(self.prompts, bg=PALETTE["bg"], highlightthickness=0, borderwidth=0)
+        scroll = ttk.Scrollbar(self.prompts, orient="vertical", command=self.prompt_cards_canvas.yview); scroll.pack(side="right", fill="y"); self.prompt_cards_canvas.pack(side="left", fill="both", expand=True); self.prompt_cards_canvas.configure(yscrollcommand=scroll.set)
+        self.prompt_cards_frame = ttk.Frame(self.prompt_cards_canvas, style="Content.TFrame"); self.prompt_cards_window = self.prompt_cards_canvas.create_window((0, 0), window=self.prompt_cards_frame, anchor="nw")
+        self.prompt_cards_frame.bind("<Configure>", lambda _: self.prompt_cards_canvas.configure(scrollregion=self.prompt_cards_canvas.bbox("all")))
+        self.prompt_cards_canvas.bind("<Configure>", lambda event: self.prompt_cards_canvas.itemconfigure(self.prompt_cards_window, width=event.width))
+
+    def render_prompt_cards(self, rows):
+        for child in self.prompt_cards_frame.winfo_children(): child.destroy()
+        self.prompt_cards_frame.columnconfigure(0, weight=1); self.prompt_cards_frame.columnconfigure(1, weight=1)
+        if not rows:
+            ttk.Label(self.prompt_cards_frame, text="Nenhum prompt encontrado", style="Muted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=24); return
+        for index, row in enumerate(rows):
+            card = ttk.Frame(self.prompt_cards_frame, style="Card.TFrame", padding=(18, 16)); card.grid(row=index // 2, column=index % 2, sticky="nsew", padx=(0 if index % 2 == 0 else 8, 8 if index % 2 == 0 else 0), pady=(0, 12)); self.prompt_cards_frame.rowconfigure(index // 2, weight=0)
+            ttk.Label(card, text=row["name"], style="CardTitle.TLabel").pack(anchor="w")
+            meta = " • ".join(x for x in (row["category"] or "Sem categoria", row["tool"] or "Sem ferramenta") if x)
+            ttk.Label(card, text=meta, style="CardMeta.TLabel").pack(anchor="w", pady=(5, 8))
+            ttk.Label(card, text=row["tags"] or "Sem tags", style="CardTag.TLabel").pack(anchor="w")
+            ttk.Label(card, text=f"Uso: {row["usage_count"] or 0}  •  Atualizado {row["updated_at"]}", style="CardMeta.TLabel").pack(anchor="w", pady=(12, 0))
+            actions = ttk.Frame(card, style="Card.TFrame"); actions.pack(fill="x", pady=(12, 0)); ttk.Button(actions, text="★" if row["favorite"] else "☆", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_toggle_prompt(rid, "favorite")).pack(side="left"); ttk.Button(actions, text="Abrir", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_open_prompt(rid)).pack(side="right")
+            for widget in (card, *card.winfo_children()): widget.bind("<Double-1>", lambda _event, rid=row["id"]: self.card_open_prompt(rid))
+
+    def card_select_prompt(self, rid):
+        self.prompt_tree.selection_set(str(rid)); self.prompt_tree.focus(str(rid))
+
+    def card_open_prompt(self, rid):
+        self.card_select_prompt(rid); self.edit_prompt()
+
+    def card_toggle_prompt(self, rid, column):
+        self.card_select_prompt(rid); self.toggle_flag("prompts", self.prompt_tree, column)
 
     def tip_tab(self):
         self.tips = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.tips, text="Governança")
@@ -762,8 +797,9 @@ class MainApp(ttk.Frame):
         enabled = self.type_filter.get(); allowed={"Todos":set(CONTENT_TABLES),"Projetos":{"projects"},"Prompts":{"prompts"},"Governança":{"tips"},"Códigos":{"codes"},"Arquivos":{"files"},"Conhecimento":{"knowledge"}}.get(enabled,set(CONTENT_TABLES))
         if "projects" in allowed:
             for r in self.query("projects"): self.project_tree.insert("","end",iid=str(r["id"]),values=("📌" if r["pinned"] else "","★" if r["favorite"] else "","T" if r["is_template"] else "",r["name"],r["status"],self.category_map.get(r["category_id"],""),r["tags"] or ""))
-        if "prompts" in allowed:
-            for r in self.query("prompts","pinned DESC, favorite DESC, updated_at DESC"): self.prompt_tree.insert("","end",iid=str(r["id"]),values=("📌" if r["pinned"] else "","★" if r["favorite"] else "","T" if r["is_template"] else "",r["name"],r["status"] or "Rascunho",self.category_map.get(r["category_id"],r["category"] or ""),self.project_map.get(r["project_id"],""),r["tool"] or "",r["tags"] or ""))
+        prompt_rows = self.query("prompts","pinned DESC, favorite DESC, updated_at DESC") if "prompts" in allowed else []
+        for r in prompt_rows: self.prompt_tree.insert("","end",iid=str(r["id"]),values=("📌" if r["pinned"] else "","★" if r["favorite"] else "","T" if r["is_template"] else "",r["name"],r["status"] or "Rascunho",self.category_map.get(r["category_id"],r["category"] or ""),self.project_map.get(r["project_id"],""),r["tool"] or "",r["tags"] or ""))
+        self.render_prompt_cards(prompt_rows)
         if "tips" in allowed:
             for r in self.query("tips"): self.tip_tree.insert("","end",iid=str(r["id"]),values=("📌" if r["pinned"] else "","★" if r["favorite"] else "","T" if r["is_template"] else "",r["title"],r["status"] or "Rascunho",self.category_map.get(r["category_id"],r["category"] or ""),r["tags"] or ""))
         if "codes" in allowed:
@@ -822,7 +858,9 @@ class MainApp(ttk.Frame):
     def copy_row(self, tree, table, field):
         rid = self.selected(tree)
         if rid:
-            row = self.storage.db.execute(f"SELECT {field} FROM {table} WHERE id=?", (rid,)).fetchone(); self.master.clipboard_clear(); self.master.clipboard_append(row[field]); messagebox.showinfo(APP_NAME, "Conteúdo copiado.")
+            row = self.storage.db.execute(f"SELECT {field} FROM {table} WHERE id=?", (rid,)).fetchone(); self.master.clipboard_clear(); self.master.clipboard_append(row[field])
+            if table == "prompts": self.storage.db.execute("UPDATE prompts SET usage_count=COALESCE(usage_count,0)+1,updated_at=? WHERE id=?", (now(), rid)); self.storage.db.commit(); self.refresh_all()
+            messagebox.showinfo(APP_NAME, "Conteúdo copiado.")
     def copy_prompt(self): self.copy_row(self.prompt_tree, "prompts", "content")
     def copy_tip(self): self.copy_row(self.tip_tree, "tips", "content")
     def copy_code(self): self.copy_row(self.code_tree, "codes", "content")
@@ -860,7 +898,7 @@ class MainApp(ttk.Frame):
             return
         win = tk.Toplevel(self); win.title("Histórico do prompt"); win.transient(self); win.geometry("760x520")
         frame, tree = self.tree(win, ("version", "created"), ("Versão", "Criada em")); frame.pack(fill="x", padx=14, pady=14)
-        text = tk.Text(win, height=15, wrap="word", font=("Segoe UI", 14), bg=PALETTE["input"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", padx=10, pady=8); text.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+        text = tk.Text(win, height=15, wrap="word", font=("Inter", 14), bg=PALETTE["input"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", padx=10, pady=8); text.pack(fill="both", expand=True, padx=14, pady=(0, 14))
         versions = self.storage.prompt_versions(rid)
         for version in versions: tree.insert("", "end", iid=str(version["id"]), values=(version["version"], version["created_at"]))
         def show(_=None):
@@ -897,7 +935,7 @@ class MainApp(ttk.Frame):
         widgets = {}
         for i, (key, label, kind, options) in enumerate(fields):
             ttk.Label(inner, text=label, style="FieldLabel.TLabel").grid(row=i + 2, column=0, sticky="nw", padx=(0, 14), pady=7)
-            w = ttk.Combobox(inner, values=options, state="readonly") if kind == "combo" else tk.Text(inner, height=5, wrap="word", font=("Segoe UI", 14), bg=PALETTE["input"], fg=PALETTE["text"], insertbackground=PALETTE["text"], selectbackground=PALETTE["selection"], selectforeground=PALETTE["text"], relief="flat", highlightthickness=2, highlightbackground=PALETTE["border"], highlightcolor=PALETTE["focus"], padx=10, pady=8) if kind == "text" else ttk.Entry(inner)
+            w = ttk.Combobox(inner, values=options, state="readonly") if kind == "combo" else tk.Text(inner, height=5, wrap="word", font=("Inter", 14), bg=PALETTE["input"], fg=PALETTE["text"], insertbackground=PALETTE["text"], selectbackground=PALETTE["selection"], selectforeground=PALETTE["text"], relief="flat", highlightthickness=2, highlightbackground=PALETTE["border"], highlightcolor=PALETTE["focus"], padx=10, pady=8) if kind == "text" else ttk.Entry(inner)
             w.grid(row=i + 2, column=1, sticky="ew", pady=7); widgets[key] = w
             if values and values.get(key) is not None:
                 val = str(values[key]); w.insert("1.0", val) if kind == "text" else w.set(val) if kind == "combo" else w.insert(0, val)
@@ -1148,7 +1186,7 @@ class MainApp(ttk.Frame):
         for r in self.storage.db.execute("SELECT * FROM activity_log ORDER BY id DESC LIMIT 500"):tree.insert("","end",values=(r["created_at"],r["action"],r["entity_type"] or "",r["entity_id"] or "",r["details"] or ""))
     def diagnose_installation(self):
         checks,integrity=self.storage.diagnosis();lines=[f"Biblioteca de Prompts {APP_VERSION}",f"Build: {BUILD_DATE}",f"Sistema: {platform.platform()}",f"Python: {platform.python_version()}",f"Executável/app: {sys.executable if getattr(sys,'frozen',False) else Path(__file__).resolve()}",f"Dados: {self.storage.base_dir}",f"Modo portátil: {'Sim' if self.storage.base_dir==application_dir()/'data' else 'Não'}",""]+[f"{name}: {'OK' if value else 'FALHA'}" for name,value in checks.items()]+[f"Arquivos ausentes: {len(integrity['missing_files'])}",f"Arquivos órfãos: {len(integrity['orphan_files'])}",f"Registros órfãos: {len(integrity['orphan_records'])}"]
-        win=tk.Toplevel(self);win.title("Diagnóstico de instalação");win.transient(self);win.geometry("760x560");box=tk.Text(win,wrap="word",font=("Segoe UI",12),bg=PALETTE["input"],fg=PALETTE["text"]);box.pack(fill="both",expand=True,padx=12,pady=12);box.insert("1.0","\n".join(lines));box.configure(state="disabled")
+        win=tk.Toplevel(self);win.title("Diagnóstico de instalação");win.transient(self);win.geometry("760x560");box=tk.Text(win,wrap="word",font=("Inter",12),bg=PALETTE["input"],fg=PALETTE["text"]);box.pack(fill="both",expand=True,padx=12,pady=12);box.insert("1.0","\n".join(lines));box.configure(state="disabled")
         def export():
             target=filedialog.asksaveasfilename(defaultextension=".txt",filetypes=[("Texto","*.txt"),("Markdown","*.md")])
             if target and self.confirm_export("O diagnóstico da instalação"):Path(target).write_text("\n".join(lines)+"\n",encoding="utf-8");self.storage.log_activity("exportação","instalação",None,Path(target).name)
@@ -1272,19 +1310,20 @@ class App(tk.Tk):
         super().__init__(); self.storage=Storage(); self.title(APP_NAME); self.geometry("1200x780"); self.minsize(760,520); self.configure(bg=PALETTE["bg"]); style=ttk.Style(self); style.theme_use("clam")
         try: self.iconbitmap(str(Path(__file__).resolve().parent / "icon.ico"))
         except tk.TclError: pass
-        style.configure(".", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12)); style.configure("TFrame", background=PALETTE["surface"]); style.configure("TLabel", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Segoe UI", 12))
-        style.configure("TButton", padding=(13, 8), foreground=PALETTE["text"], background=PALETTE["surface_raised"], bordercolor=PALETTE["border_soft"], font=("Segoe UI", 11)); style.map("TButton", background=[("active", PALETTE["border"]), ("pressed", PALETTE["purple"]), ("focus", PALETTE["border"])], foreground=[("disabled", "#6F6A82")], bordercolor=[("focus", PALETTE["focus"])])
-        style.configure("Primary.TButton", background=PALETTE["violet"], foreground=PALETTE["text"], font=("Segoe UI", 11, "bold"), padding=(15, 9)); style.map("Primary.TButton", background=[("active", PALETTE["purple"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["purple"])])
-        style.configure("Quiet.TButton", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10), borderwidth=0); style.map("Quiet.TButton", background=[("active", PALETTE["surface_raised"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["surface_raised"])], foreground=[("active", PALETTE["text"])])
-        style.configure("Danger.TButton", background="#552630", foreground="#FFDADF", font=("Segoe UI", 10, "bold")); style.map("Danger.TButton", background=[("active", PALETTE["danger"]), ("pressed", "#A93F4E"), ("focus", PALETTE["danger"])], foreground=[("active", "#FFFFFF")])
-        style.configure("Success.TButton", background="#214B3A", foreground="#B9F5D4", font=("Segoe UI", 10, "bold")); style.map("Success.TButton", background=[("active", PALETTE["success"]), ("pressed", "#2E8B5C")])
-        style.configure("Title.TLabel", font=("Segoe UI", 22, "bold"), foreground=PALETTE["pink"]); style.configure("BrandMark.TLabel", font=("Segoe UI Symbol", 40), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("Hero.TLabel", font=("Segoe UI", 25, "bold"), foreground=PALETTE["text"]); style.configure("Section.TLabel", font=("Segoe UI", 17, "bold"), foreground=PALETTE["text"]); style.configure("Kicker.TLabel", foreground=PALETTE["cyan"], font=("Segoe UI", 9, "bold")); style.configure("Subtitle.TLabel", foreground=PALETTE["muted"], font=("Segoe UI", 12)); style.configure("Muted.TLabel", foreground=PALETTE["muted"], wraplength=760, font=("Segoe UI", 11)); style.configure("CardBody.TLabel", foreground=PALETTE["text"], background=PALETTE["surface_raised"], wraplength=760, font=("Segoe UI", 11)); style.configure("FieldLabel.TLabel", foreground=PALETTE["text"], font=("Segoe UI", 11, "bold")); style.configure("Metric.TLabel", font=("Segoe UI", 30, "bold"), foreground=PALETTE["pink"], background=PALETTE["surface_raised"]); style.configure("CardLabel.TLabel", foreground=PALETTE["muted"], background=PALETTE["surface_raised"], font=("Segoe UI", 8, "bold"));
-        style.configure("Card.TFrame", background=PALETTE["surface_raised"]); style.configure("CardHover.TFrame", background="#26213F"); style.configure("Inset.TFrame", background=PALETTE["input"]); style.configure("Hero.TFrame", background=PALETTE["surface"]); style.configure("Toolbar.TFrame", background=PALETTE["surface"]); style.configure("Modal.TFrame", background=PALETTE["surface"]); style.configure("FormHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10)); style.configure("SearchHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10)); style.configure("Search.TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["violet"], lightcolor=PALETTE["violet"], darkcolor=PALETTE["border"], padding=12, font=("Segoe UI", 13)); style.map("Search.TEntry", fieldbackground=[("focus", PALETTE["surface_raised"])], bordercolor=[("focus", PALETTE["pink"])], lightcolor=[("focus", PALETTE["pink"])])
+        style.configure(".", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Inter", 12)); style.configure("TFrame", background=PALETTE["surface"]); style.configure("TLabel", background=PALETTE["surface"], foreground=PALETTE["text"], font=("Inter", 12)); style.configure("Sidebar.TFrame", background=PALETTE["sidebar"]); style.configure("Content.TFrame", background=PALETTE["bg"])
+        style.configure("TButton", padding=(13, 8), foreground=PALETTE["text"], background=PALETTE["surface_raised"], bordercolor=PALETTE["border_soft"], font=("Inter", 11)); style.map("TButton", background=[("active", PALETTE["border"]), ("pressed", PALETTE["purple"]), ("focus", PALETTE["border"])], foreground=[("disabled", "#6F6A82")], bordercolor=[("focus", PALETTE["focus"])])
+        style.configure("Primary.TButton", background=PALETTE["violet"], foreground=PALETTE["text"], font=("Inter", 11, "bold"), padding=(15, 9)); style.map("Primary.TButton", background=[("active", PALETTE["purple"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["purple"])])
+        style.configure("Quiet.TButton", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Inter", 10), borderwidth=0); style.map("Quiet.TButton", background=[("active", PALETTE["surface_raised"]), ("pressed", PALETTE["selection"]), ("focus", PALETTE["surface_raised"])], foreground=[("active", PALETTE["text"])])
+        style.configure("Danger.TButton", background="#552630", foreground="#FFDADF", font=("Inter", 10, "bold")); style.map("Danger.TButton", background=[("active", PALETTE["danger"]), ("pressed", "#A93F4E"), ("focus", PALETTE["danger"])], foreground=[("active", "#FFFFFF")])
+        style.configure("Success.TButton", background="#214B3A", foreground="#B9F5D4", font=("Inter", 10, "bold")); style.map("Success.TButton", background=[("active", PALETTE["success"]), ("pressed", "#2E8B5C")])
+        style.configure("Title.TLabel", font=("Inter", 22, "bold"), foreground=PALETTE["text"], background=PALETTE["bg"]); style.configure("BrandMark.TLabel", font=("Inter Symbol", 40), foreground=PALETTE["cyan"], background=PALETTE["bg"]); style.configure("Hero.TLabel", font=("Inter", 25, "bold"), foreground=PALETTE["text"]); style.configure("Section.TLabel", font=("Inter", 17, "bold"), foreground=PALETTE["text"]); style.configure("Kicker.TLabel", foreground=PALETTE["cyan"], font=("Inter", 9, "bold")); style.configure("Subtitle.TLabel", foreground=PALETTE["muted"], font=("Inter", 12)); style.configure("Muted.TLabel", foreground=PALETTE["muted"], wraplength=760, font=("Inter", 11)); style.configure("CardBody.TLabel", foreground=PALETTE["text"], background=PALETTE["surface_raised"], wraplength=760, font=("Inter", 11)); style.configure("FieldLabel.TLabel", foreground=PALETTE["text"], font=("Inter", 11, "bold")); style.configure("Metric.TLabel", font=("Inter", 30, "bold"), foreground=PALETTE["pink"], background=PALETTE["surface_raised"]); style.configure("CardLabel.TLabel", foreground=PALETTE["muted"], background=PALETTE["surface_raised"], font=("Inter", 8, "bold")); style.configure("SidebarBrand.TLabel", background=PALETTE["sidebar"], foreground=PALETTE["text"], font=("Inter", 16, "bold")); style.configure("SidebarFoot.TLabel", background=PALETTE["sidebar"], foreground=PALETTE["muted"], font=("Inter", 9)); style.configure("Sidebar.TButton", background=PALETTE["sidebar"], foreground=PALETTE["muted"], borderwidth=0, padding=(10, 10), anchor="w", font=("Inter", 11)); style.map("Sidebar.TButton", background=[("active", PALETTE["surface"]), ("pressed", PALETTE["surface_raised"])], foreground=[("active", PALETTE["text"])])
+        style.configure("SearchIcon.TLabel", background=PALETTE["input"], foreground=PALETTE["muted"], font=("Inter", 16)); style.configure("CardTitle.TLabel", background=PALETTE["surface_raised"], foreground=PALETTE["text"], font=("Inter", 14, "bold")); style.configure("CardMeta.TLabel", background=PALETTE["surface_raised"], foreground=PALETTE["muted"], font=("Inter", 10)); style.configure("CardTag.TLabel", background=PALETTE["surface_raised"], foreground=PALETTE["purple"], font=("Inter", 10));
+        style.configure("Card.TFrame", background=PALETTE["surface_raised"]); style.configure("CardHover.TFrame", background="#26213F"); style.configure("Inset.TFrame", background=PALETTE["input"]); style.configure("Hero.TFrame", background=PALETTE["surface"]); style.configure("Toolbar.TFrame", background=PALETTE["surface"]); style.configure("Modal.TFrame", background=PALETTE["surface"]); style.configure("FormHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Inter", 10)); style.configure("SearchHint.TLabel", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Inter", 10)); style.configure("Search.TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["violet"], lightcolor=PALETTE["violet"], darkcolor=PALETTE["border"], padding=12, font=("Inter", 13)); style.map("Search.TEntry", fieldbackground=[("focus", PALETTE["surface_raised"])], bordercolor=[("focus", PALETTE["pink"])], lightcolor=[("focus", PALETTE["pink"])])
 
-        style.configure("TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Segoe UI", 11)); style.map("TEntry", fieldbackground=[("focus", PALETTE["input"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
-        style.configure("TCombobox", fieldbackground=PALETTE["input"], background=PALETTE["input"], foreground=PALETTE["text"], arrowcolor=PALETTE["cyan"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Segoe UI", 11)); style.map("TCombobox", fieldbackground=[("readonly", PALETTE["input"]), ("focus", PALETTE["input"])], foreground=[("readonly", PALETTE["text"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
-        style.layout("Hidden.TNotebook.Tab", []); style.configure("Hidden.TNotebook", background=PALETTE["bg"], borderwidth=0); style.configure("TNotebook", background=PALETTE["bg"], borderwidth=0, tabmargins=(0, 0, 0, 0)); style.configure("TNotebook.Tab", background=PALETTE["surface"], foreground=PALETTE["muted"], padding=(16, 10), borderwidth=0, lightcolor=PALETTE["surface"], darkcolor=PALETTE["surface"], font=("Segoe UI", 10, "bold")); style.map("TNotebook.Tab", background=[("selected", PALETTE["surface_raised"]), ("active", PALETTE["surface_raised"])], foreground=[("selected", PALETTE["pink"]), ("active", PALETTE["text"])], lightcolor=[("selected", PALETTE["surface_raised"])], darkcolor=[("selected", PALETTE["surface_raised"])])
-        style.configure("Treeview", background=PALETTE["surface"], fieldbackground=PALETTE["surface"], foreground=PALETTE["text"], rowheight=40, font=("Segoe UI", 11), borderwidth=0, relief="flat"); style.configure("Treeview.Heading", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Segoe UI", 10, "bold"), padding=(10, 11), relief="flat", borderwidth=0); style.map("Treeview", background=[("selected", PALETTE["selection"]), ("focus", PALETTE["selection"])], foreground=[("selected", PALETTE["text"])])
+        style.configure("TEntry", fieldbackground=PALETTE["input"], foreground=PALETTE["text"], insertcolor=PALETTE["text"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Inter", 11)); style.map("TEntry", fieldbackground=[("focus", PALETTE["input"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
+        style.configure("TCombobox", fieldbackground=PALETTE["input"], background=PALETTE["input"], foreground=PALETTE["text"], arrowcolor=PALETTE["cyan"], bordercolor=PALETTE["border"], lightcolor=PALETTE["focus"], darkcolor=PALETTE["border"], padding=9, font=("Inter", 11)); style.map("TCombobox", fieldbackground=[("readonly", PALETTE["input"]), ("focus", PALETTE["input"])], foreground=[("readonly", PALETTE["text"])], bordercolor=[("focus", PALETTE["focus"])], lightcolor=[("focus", PALETTE["focus"])])
+        style.layout("Hidden.TNotebook.Tab", []); style.configure("Hidden.TNotebook", background=PALETTE["bg"], borderwidth=0); style.configure("TNotebook", background=PALETTE["bg"], borderwidth=0, tabmargins=(0, 0, 0, 0)); style.configure("TNotebook.Tab", background=PALETTE["surface"], foreground=PALETTE["muted"], padding=(16, 10), borderwidth=0, lightcolor=PALETTE["surface"], darkcolor=PALETTE["surface"], font=("Inter", 10, "bold")); style.map("TNotebook.Tab", background=[("selected", PALETTE["surface_raised"]), ("active", PALETTE["surface_raised"])], foreground=[("selected", PALETTE["pink"]), ("active", PALETTE["text"])], lightcolor=[("selected", PALETTE["surface_raised"])], darkcolor=[("selected", PALETTE["surface_raised"])])
+        style.configure("Treeview", background=PALETTE["surface"], fieldbackground=PALETTE["surface"], foreground=PALETTE["text"], rowheight=40, font=("Inter", 11), borderwidth=0, relief="flat"); style.configure("Treeview.Heading", background=PALETTE["surface"], foreground=PALETTE["muted"], font=("Inter", 10, "bold"), padding=(10, 11), relief="flat", borderwidth=0); style.map("Treeview", background=[("selected", PALETTE["selection"]), ("focus", PALETTE["selection"])], foreground=[("selected", PALETTE["text"])])
         self.protocol("WM_DELETE_WINDOW", self.quit_app)
         MainApp(self).pack(fill="both", expand=True)
     def quit_app(self):

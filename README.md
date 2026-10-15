@@ -4,7 +4,7 @@
 
 Aplicação desktop local para organizar prompts, projetos, governança, códigos e arquivos técnicos. Funciona offline, usa SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
-**Versão em produção:** v1.0.5 — revisão UX/UI focada em retomada de trabalho, com preservação de dados.
+**Versão em produção:** v1.1.0 — redesenho estrutural premium com sidebar, busca e cards, preservando os dados locais.
 
 ## Navegação principal
 
@@ -25,7 +25,7 @@ A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o
 
 ## Compatibilidade e migração
 
-Não é necessária nenhuma migração destrutiva para a v1.0.5. A autenticação foi removida do fluxo de uso, mas as tabelas e configurações legadas permanecem intactas no SQLite. A revisão UX/UI é compatível com dados existentes e com backups existentes.
+Não é necessária nenhuma migração destrutiva para a v1.1.0. A autenticação foi removida do fluxo de uso, as tabelas e configurações legadas permanecem intactas no SQLite e a nova coluna de uso é adicionada de forma compatível. O redesenho é compatível com dados existentes e backups existentes.
 
 ## Instalação
 

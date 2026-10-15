@@ -2,7 +2,7 @@
 
 ## Resultado
 
-A versão de produção em validação é **v1.0.5** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
+A versão de produção em validação é **v1.1.0** do repositório [ericasouzaqa/biblioteca-de-prompts](https://github.com/ericasouzaqa/biblioteca-de-prompts). O aplicativo permanece desktop, offline-first e portátil no Windows.
 
 ## Alterações confirmadas
 
@@ -90,3 +90,41 @@ As capturas foram verificadas em ambiente virtual com resolução de 1280×1024 
 ### Validação adicional
 
 Novo teste automatizado: `test_ux_review.py`, cobrindo busca sem controles avançados expostos, navegação principal e itens do menu Mais, ações secundárias dentro de **⋯ Mais ações**, botões **Salvar/Cancelar**, botões **Alterar/Cancelar** e seleção de tipo preservada no menu.
+
+
+## Redesign estrutural premium — v1.1.0
+
+A experiência foi reprojetada, não apenas tematizada. A Home agora abre diretamente na biblioteca de Prompts com sidebar persistente, busca moderna, ação primária **＋ Novo Prompt** e visualização principal em cards. A tabela anterior permanece montada internamente apenas para preservar seleção, CRUD, histórico, favoritos e compatibilidade das rotinas existentes; ela não é mais a visualização principal de Prompts.
+
+A sidebar contém Prompts, Projetos, Favoritos, Recentes, Repositórios e Configurações. Recursos de menor frequência continuam acessíveis no menu moderno de contexto, incluindo Governança, Wiki, Templates, Coleções, Códigos, Diagnóstico, Relatórios, Lixeira, filtros e histórico.
+
+Os prompt cards exibem nome, categoria, ferramenta, tags, quantidade de uso, data de atualização, favorito e ação Abrir. A coluna local `usage_count` é adicionada por migração aditiva e incrementada quando um prompt é copiado, sem depender de qualquer API, IA ou serviço remoto.
+
+A nova identidade **Spark Library** foi criada para substituir o ícone anterior. O conceito combina biblioteca digital, organização e uma faísca de inteligência. Foram versionados SVG, PNG, favicon e ICO Windows.
+
+### Entregáveis de design
+
+- [Documento completo do redesign](docs/REDESIGN_UX_UI_v1.1.md)
+- [Wireframe Mermaid](docs/wireframe_redesign_v1.1.mmd)
+- [Wireframe renderizado](docs/wireframe_redesign_v1.1.png)
+- [Mockup Home vazia](screenshots_redesign_home.png)
+- [Mockup Home com cards](screenshots_redesign_cards.png)
+- [Logo Spark Library em SVG](assets/logo_spark_library.svg)
+- [Logo Spark Library em PNG](assets/logo_spark_library.png)
+
+### Independência operacional
+
+Nenhuma dependência de IA em tempo de execução foi introduzida. A aplicação continua local, offline-first, previsível e independente de modelos, APIs, chaves, tokens, internet e plataformas externas.
+
+### Validação do redesign
+
+A suíte passou integralmente após a implementação da sidebar, cards, migração de `usage_count`, novo ícone e atualização dos testes:
+
+```text
+STORAGE_TESTS_OK
+GUI_SMOKE_OK
+REGRESSION_TESTS_OK
+PRODUCTION_MODE_TESTS_OK
+UX_REVIEW_TESTS_OK
+git diff --check
+```

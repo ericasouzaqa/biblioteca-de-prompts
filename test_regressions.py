@@ -8,7 +8,7 @@ with tempfile.TemporaryDirectory() as tmp:
     main = next(child for child in window.winfo_children() if isinstance(child, app.MainApp))
     assert not any(child.__class__.__name__ == "LoginFrame" for child in window.winfo_children())
     window.update_idletasks()
-    assert str(main.tabs.select()) == str(main.dashboard)
+    assert str(main.tabs.select()) == str(main.prompts)
     assert main.search.winfo_exists()
     assert main.home_favorites.winfo_exists()
     assert main.home_recent.winfo_exists()

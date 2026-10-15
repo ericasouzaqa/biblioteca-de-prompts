@@ -1,0 +1,16 @@
+flowchart LR
+    S["✦ Biblioteca<br/><br/>✎ Prompts<br/>▣ Projetos<br/>★ Favoritos<br/>◷ Recentes<br/>↗ Repositórios<br/><br/>⚙ Configurações"]
+    M["Biblioteca de Prompts<br/><small>Organize seu contexto. Retome seu trabalho.</small><br/><br/>⌕ Pesquisar prompts, projetos ou categorias...   •••"]
+    A["＋ Novo Prompt"]
+    C1["✨ Gerador de STEPs<br/><small>QA • GPT • Testes</small><br/><br/>245 utilizações<br/>Atualizado hoje<br/><br/>☆ Favoritar    Abrir"]
+    C2["🧠 Revisão de Prompt<br/><small>Operações • GPT</small><br/><br/>82 utilizações<br/>Atualizado ontem<br/><br/>★ Favoritado    Abrir"]
+    S --> M
+    M --> A
+    M --> C1
+    M --> C2
+    classDef side fill:#161A23,stroke:#2A3344,color:#FFFFFF
+    classDef main fill:#0F1117,stroke:#2A3344,color:#FFFFFF
+    classDef card fill:#222A39,stroke:#2A3344,color:#FFFFFF
+    class S side
+    class M,A main
+    class C1,C2 card

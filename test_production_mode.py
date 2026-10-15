@@ -9,7 +9,7 @@ with tempfile.TemporaryDirectory() as tmp:
     main = next(child for child in window.winfo_children() if isinstance(child, app.MainApp))
     assert isinstance(main, app.MainApp)
     window.update_idletasks()
-    assert str(main.tabs.select()) == str(main.dashboard)
+    assert str(main.tabs.select()) == str(main.prompts)
 
     created = app.now()
     main.storage.db.execute(
