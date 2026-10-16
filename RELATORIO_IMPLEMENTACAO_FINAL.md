@@ -179,3 +179,12 @@ git diff --check
 ```
 
 O teste `test_v120.py` cobre extração e renderização de variáveis, métricas, Dashboard, Playground, filtro por ferramenta e exportação ZIP com JSON e Markdown.
+
+
+### Publicação da v1.2.0
+
+- [Release v1.2.0 — Variáveis e produtividade local](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/tag/v1.2.0)
+- [Executável Windows portátil](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.2.0/BibliotecaDePrompts.exe)
+- [ZIP Windows portátil](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.2.0/BibliotecaDePrompts-Windows.zip)
+
+O build Windows foi aprovado em todas as etapas. O EXE publicado possui 15.286.458 bytes e SHA-256 `f1cc7f64e6b691fe3cfa6ef3e3d1818877f8363578e8313ba3f0a4be363d3108`. O ZIP possui 14.940.278 bytes e SHA-256 `ecb6bae505eda0fecf03b45dfc7c575a304a101fa5b2af5916c3f87926803de1`.
