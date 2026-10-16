@@ -4,18 +4,20 @@ import hmac
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import sys
 import sqlite3
 import tkinter as tk
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_NAME = "Biblioteca de Prompts"
-APP_VERSION = "1.1.0"
-BUILD_DATE = "2026-10-15"
+APP_VERSION = "1.2.0"
+BUILD_DATE = "2026-10-16"
 PALETTE = {
     "bg": "#0F1117", "sidebar": "#161A23", "surface": "#1D2330",
     "surface_raised": "#222A39", "border": "#2A3344", "border_soft": "#202735",
@@ -82,6 +84,30 @@ def sha256_file(path):
         for block in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+VARIABLE_PATTERN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}")
+
+
+def prompt_variables(content):
+    """Return unique prompt variables in first-seen order."""
+    found = []
+    for name in VARIABLE_PATTERN.findall(str(content or "")):
+        if name not in found:
+            found.append(name)
+    return found
+
+
+def render_prompt(content, values):
+    """Render variables locally; unresolved placeholders remain visible."""
+    values = {str(key): str(value or "") for key, value in (values or {}).items()}
+    return VARIABLE_PATTERN.sub(lambda match: values.get(match.group(1), match.group(0)), str(content or ""))
+
+
+def prompt_markdown(row):
+    name = row.get("name") or "Prompt sem nome"
+    lines = [f"# {name}", "", f"- **Categoria:** {row.get('category') or 'Sem categoria'}", f"- **Ferramenta:** {row.get('tool') or 'Sem ferramenta'}", f"- **Tags:** {row.get('tags') or 'Sem tags'}", "", "## Prompt", "", str(row.get("content") or "")]
+    return "\n".join(lines) + "\n"
 
 
 class Storage:
@@ -471,6 +497,17 @@ class Storage:
         archived = sum(self.db.execute(f"SELECT COUNT(*) n FROM {table} WHERE status='Arquivado'").fetchone()["n"] for table in ("prompts","tips","knowledge"))
         return {"created_30":created,"edited_30":edited,"restored_30":restored,"active_projects":active,"review":review,"archived":archived}
 
+    def prompt_metrics(self, days=30):
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        total = self.db.execute("SELECT COUNT(*) n FROM prompts").fetchone()["n"]
+        favorites = self.db.execute("SELECT COUNT(*) n FROM prompts WHERE favorite=1").fetchone()["n"]
+        usage = self.db.execute("SELECT COALESCE(SUM(usage_count),0) n FROM prompts").fetchone()["n"]
+        recent_usage = self.db.execute("SELECT COUNT(*) n FROM activity_log WHERE action IN ('cópia','uso de prompt') AND created_at>=?", (cutoff,)).fetchone()["n"]
+        top_prompts = self.db.execute("SELECT name,COALESCE(usage_count,0) usage_count FROM prompts ORDER BY usage_count DESC,name COLLATE NOCASE LIMIT 8").fetchall()
+        top_categories = self.db.execute("SELECT COALESCE(NULLIF(category,''),'Sem categoria') category,COALESCE(SUM(usage_count),0) usage_count,COUNT(*) prompts FROM prompts GROUP BY COALESCE(NULLIF(category,''),'Sem categoria') ORDER BY usage_count DESC,category COLLATE NOCASE LIMIT 8").fetchall()
+        usage_by_day = self.db.execute("SELECT substr(created_at,1,10) day,COUNT(*) total FROM activity_log WHERE action IN ('cópia','uso de prompt') AND created_at>=? GROUP BY day ORDER BY day", (cutoff,)).fetchall()
+        return {"total":total,"favorites":favorites,"usage":usage,"recent_usage":recent_usage,"top_prompts":top_prompts,"top_categories":top_categories,"usage_by_day":usage_by_day}
+
     def diagnosis(self):
         integrity = self.verify_library(); checks = {
             "SQLite acessível": integrity["database_accessible"], "SQLite íntegro": integrity["database_integrity"],
@@ -487,7 +524,7 @@ class MainApp(ttk.Frame):
     def __init__(self, master):
         super().__init__(master, padding=12)
         self.master = master; self.storage = master.storage
-        self.project_map = {}; self.category_map = {}; self.search_var = tk.StringVar(); self.type_filter = tk.StringVar(value="Todos")
+        self.project_map = {}; self.category_map = {}; self.search_var = tk.StringVar(); self.type_filter = tk.StringVar(value="Todos"); self.tool_filter = tk.StringVar(value="Todas")
         self.tag_filter = tk.StringVar(); self.category_filter = tk.StringVar(value="Todas"); self.favorite_filter = tk.BooleanVar(value=False)
         self.template_filter = tk.BooleanVar(value=False); self.status_filter = tk.StringVar(value="Todos"); self.date_from_filter = tk.StringVar(); self.date_to_filter = tk.StringVar()
         self.refresh_job = None; self.build()
@@ -498,15 +535,15 @@ class MainApp(ttk.Frame):
     def build(self):
         self.columnconfigure(0, weight=1); self.rowconfigure(0, weight=1)
         shell = ttk.Frame(self); shell.grid(row=0, column=0, sticky="nsew"); shell.columnconfigure(1, weight=1); shell.rowconfigure(0, weight=1)
-        sidebar = ttk.Frame(shell, style="Sidebar.TFrame", padding=(18, 22)); sidebar.grid(row=0, column=0, sticky="nsew"); sidebar.rowconfigure(7, weight=1)
+        sidebar = ttk.Frame(shell, style="Sidebar.TFrame", padding=(18, 22)); sidebar.grid(row=0, column=0, sticky="nsew"); sidebar.rowconfigure(8, weight=1)
         self.sidebar = sidebar
         ttk.Label(sidebar, text="✦  Biblioteca", style="SidebarBrand.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 30))
-        nav_items = (("✎  Prompts", lambda: self.tabs.select(self.prompts)), ("▣  Projetos", lambda: self.tabs.select(self.projects)), ("★  Favoritos", self.show_favorites), ("◷  Recentes", self.show_recent), ("↗  Repositórios", lambda: self.tabs.select(self.repository)))
+        nav_items = (("✎  Prompts", lambda: self.tabs.select(self.prompts)), ("▦  Dashboard", lambda: self.tabs.select(self.metrics_dashboard)), ("▣  Projetos", lambda: self.tabs.select(self.projects)), ("★  Favoritos", self.show_favorites), ("◷  Recentes", self.show_recent), ("↗  Repositórios", lambda: self.tabs.select(self.repository)))
         for row, (label, command) in enumerate(nav_items, 1):
             ttk.Button(sidebar, text=label, style="Sidebar.TButton", command=command).grid(row=row, column=0, sticky="ew", pady=3)
-        ttk.Separator(sidebar).grid(row=6, column=0, sticky="ew", pady=(18, 12))
-        ttk.Button(sidebar, text="⚙  Configurações", style="Sidebar.TButton", command=lambda: self.tabs.select(self.settings)).grid(row=8, column=0, sticky="ew", pady=3)
-        ttk.Label(sidebar, text="OFFLINE • LOCAL", style="SidebarFoot.TLabel").grid(row=9, column=0, sticky="sw", pady=(22, 0))
+        ttk.Separator(sidebar).grid(row=7, column=0, sticky="ew", pady=(18, 12))
+        ttk.Button(sidebar, text="⚙  Configurações", style="Sidebar.TButton", command=lambda: self.tabs.select(self.settings)).grid(row=9, column=0, sticky="ew", pady=3)
+        ttk.Label(sidebar, text="OFFLINE • LOCAL", style="SidebarFoot.TLabel").grid(row=10, column=0, sticky="sw", pady=(22, 0))
 
         content = ttk.Frame(shell, style="Content.TFrame", padding=(34, 28)); content.grid(row=0, column=1, sticky="nsew"); content.columnconfigure(0, weight=1); content.rowconfigure(3, weight=1)
         self.content = content
@@ -520,11 +557,11 @@ class MainApp(ttk.Frame):
         self.filter_summary = ttk.Label(content, text="", style="Muted.TLabel")
         self.advanced_menu = ttk.Menubutton(search, text="•••", style="Quiet.TButton"); self.advanced_menu.grid(row=0, column=2, padx=(8, 0))
         menu = tk.Menu(self.advanced_menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"]); self.advanced_menu.configure(menu=menu)
-        for var in (self.type_filter, self.category_filter, self.favorite_filter, self.template_filter, self.status_filter): var.trace_add("write", lambda *_: self.schedule_refresh())
+        for var in (self.type_filter, self.tool_filter, self.category_filter, self.favorite_filter, self.template_filter, self.status_filter): var.trace_add("write", lambda *_: self.schedule_refresh())
         self.search.bind("<KeyRelease>", self.schedule_refresh)
         self.tabs = ttk.Notebook(content, style="Hidden.TNotebook"); self.tabs.grid(row=3, column=0, sticky="nsew")
-        self.dashboard_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.knowledge_tab(); self.template_tab(); self.collection_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
-        for label, frame in (("Governança", self.tips), ("Wiki", self.knowledge), ("Templates", self.templates), ("Coleções", self.collections_tab_frame), ("Códigos", self.codes), ("Configurações", self.settings)):
+        self.dashboard_tab(); self.metrics_dashboard_tab(); self.playground_tab(); self.project_tab(); self.prompt_tab(); self.tip_tab(); self.code_tab(); self.knowledge_tab(); self.template_tab(); self.collection_tab(); self.repository_tab(); self.settings_tab(); self.refresh_all()
+        for label, frame in (("Dashboard", self.metrics_dashboard), ("Prompt Playground", self.playground), ("Governança", self.tips), ("Wiki", self.knowledge), ("Templates", self.templates), ("Coleções", self.collections_tab_frame), ("Códigos", self.codes), ("Configurações", self.settings)):
             menu.add_command(label=label, command=lambda target=frame: self.tabs.select(target))
         menu.add_separator(); menu.add_command(label="Diagnóstico", command=self.diagnose_installation); menu.add_command(label="Relatórios", command=self.export_general_report); menu.add_command(label="Lixeira", command=self.open_trash); menu.add_separator(); menu.add_command(label="Filtros de busca", command=self.open_filters); menu.add_command(label="Histórico de buscas", command=self.show_search_history); menu.add_command(label="Limpar busca", command=self.clear_search)
         type_menu = tk.Menu(menu, tearoff=False, bg=PALETTE["surface_raised"], fg=PALETTE["text"], activebackground=PALETTE["violet"], activeforeground=PALETTE["text"])
@@ -546,6 +583,50 @@ class MainApp(ttk.Frame):
         lower = ttk.Frame(tab); lower.grid(row=4, column=0, sticky="ew", pady=(30, 0)); lower.columnconfigure((0, 1), weight=1)
         fav_shell, fav_card = self.rounded_card(lower, padding=(18, 16)); fav_shell.grid(row=0, column=0, sticky="ew", padx=(0, 12)); recent_shell, recent_card = self.rounded_card(lower, padding=(18, 16)); recent_shell.grid(row=0, column=1, sticky="ew", padx=(12, 0))
         self.home_favorites = ttk.Label(fav_card, text="Favoritos\n—", style="CardBody.TLabel"); self.home_favorites.pack(anchor="w"); self.home_recent = ttk.Label(recent_card, text="Recentes\n—", style="CardBody.TLabel"); self.home_recent.pack(anchor="w")
+
+    def metrics_dashboard_tab(self):
+        self.metrics_dashboard = ttk.Frame(self.tabs, padding=(28, 22)); self.tabs.add(self.metrics_dashboard, text="Dashboard"); self.metrics_dashboard.columnconfigure(0, weight=1); self.metrics_dashboard.rowconfigure(2, weight=1)
+        header = ttk.Frame(self.metrics_dashboard); header.grid(row=0, column=0, sticky="ew", pady=(0, 18)); header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Dashboard de uso", style="Hero.TLabel").grid(row=0, column=0, sticky="w"); ttk.Label(header, text="Métricas calculadas localmente a partir da sua biblioteca.", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0)); ttk.Button(header, text="Atualizar", style="Primary.TButton", command=self.refresh_dashboard_metrics).grid(row=0, column=1, rowspan=2, sticky="e")
+        self.metric_cards = ttk.Frame(self.metrics_dashboard); self.metric_cards.grid(row=1, column=0, sticky="ew", pady=(0, 18));
+        for col in range(4): self.metric_cards.columnconfigure(col, weight=1)
+        self.metric_values = {}
+        for col, key, label in ((0,"total","Total de prompts"),(1,"favorites","Favoritos"),(2,"usage","Uso acumulado"),(3,"recent_usage","Uso em 30 dias")):
+            shell, card = self.rounded_card(self.metric_cards, padding=(16, 12), height=92); shell.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 6, 6 if col < 3 else 0)); ttk.Label(card, text=label.upper(), style="CardLabel.TLabel").pack(anchor="w"); self.metric_values[key] = ttk.Label(card, text="0", style="Metric.TLabel"); self.metric_values[key].pack(anchor="w")
+        body = ttk.Frame(self.metrics_dashboard); body.grid(row=2, column=0, sticky="nsew"); body.columnconfigure((0, 1), weight=1); body.rowconfigure(1, weight=1)
+        left = ttk.Frame(body, style="Card.TFrame", padding=16); left.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 8)); left.columnconfigure(0, weight=1); left.rowconfigure(1, weight=1); ttk.Label(left, text="Prompts mais utilizados", style="Section.TLabel").grid(row=0, column=0, sticky="w"); self.dashboard_top_prompts = tk.Text(left, height=12, wrap="word", bg=PALETTE["surface_raised"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", font=("Inter", 11)); self.dashboard_top_prompts.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        right = ttk.Frame(body, style="Card.TFrame", padding=16); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0)); right.columnconfigure(0, weight=1); right.rowconfigure(1, weight=1); ttk.Label(right, text="Categorias mais utilizadas", style="Section.TLabel").grid(row=0, column=0, sticky="w"); self.dashboard_top_categories = tk.Text(right, height=8, wrap="word", bg=PALETTE["surface_raised"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", font=("Inter", 11)); self.dashboard_top_categories.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        period = ttk.Frame(body, style="Card.TFrame", padding=16); period.grid(row=1, column=1, sticky="nsew", padx=(8, 0), pady=(12, 0)); period.columnconfigure(0, weight=1); period.rowconfigure(1, weight=1); ttk.Label(period, text="Uso por período — últimos 30 dias", style="Section.TLabel").grid(row=0, column=0, sticky="w"); self.dashboard_usage_period = tk.Text(period, height=6, wrap="word", bg=PALETTE["surface_raised"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", font=("Inter", 11)); self.dashboard_usage_period.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+
+    def refresh_dashboard_metrics(self):
+        metrics = self.storage.prompt_metrics();
+        for key, widget in self.metric_values.items(): widget.configure(text=str(metrics[key]))
+        def fill(widget, text): widget.configure(state="normal"); widget.delete("1.0", "end"); widget.insert("1.0", text or "Nenhum dado ainda."); widget.configure(state="disabled")
+        fill(self.dashboard_top_prompts, "\n".join(f"{index}. {row['name']} — {row['usage_count']} uso(s)" for index, row in enumerate(metrics["top_prompts"], 1)))
+        fill(self.dashboard_top_categories, "\n".join(f"{row['category']} — {row['usage_count']} uso(s) • {row['prompts']} prompt(s)" for row in metrics["top_categories"]))
+        fill(self.dashboard_usage_period, "\n".join(f"{row['day']} — {row['total']} evento(s)" for row in metrics["usage_by_day"]))
+
+    def playground_tab(self):
+        self.playground = ttk.Frame(self.tabs, padding=(24, 20)); self.tabs.add(self.playground, text="Playground"); self.playground.columnconfigure((0, 1, 2), weight=1); self.playground.rowconfigure(1, weight=1)
+        ttk.Label(self.playground, text="Prompt Playground", style="Hero.TLabel").grid(row=0, column=0, columnspan=3, sticky="w"); ttk.Label(self.playground, text="Edite, preencha variáveis e visualize localmente — sem IA e sem salvar automaticamente.", style="Muted.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(38, 0))
+        self.playground_editor = tk.Text(self.playground, wrap="word", bg=PALETTE["input"], fg=PALETTE["text"], insertbackground=PALETTE["text"], relief="flat", font=("Inter", 13), padx=12, pady=12); self.playground_editor.grid(row=1, column=0, sticky="nsew", padx=(0, 8), pady=(18, 0)); self.playground_editor.bind("<KeyRelease>", lambda _: self.refresh_playground())
+        middle = ttk.Frame(self.playground, style="Card.TFrame", padding=12); middle.grid(row=1, column=1, sticky="nsew", padx=8, pady=(18, 0)); middle.columnconfigure(0, weight=1); ttk.Label(middle, text="Variáveis", style="Section.TLabel").grid(row=0, column=0, sticky="w"); self.playground_vars = ttk.Frame(middle); self.playground_vars.grid(row=1, column=0, sticky="ew", pady=(12, 0)); self.playground_values = {}
+        right = ttk.Frame(self.playground, style="Card.TFrame", padding=12); right.grid(row=1, column=2, sticky="nsew", padx=(8, 0), pady=(18, 0)); right.columnconfigure(0, weight=1); right.rowconfigure(1, weight=1); ttk.Label(right, text="Resultado renderizado", style="Section.TLabel").grid(row=0, column=0, sticky="w"); self.playground_result = tk.Text(right, wrap="word", bg=PALETTE["surface_raised"], fg=PALETTE["text"], relief="flat", font=("Inter", 13), padx=12, pady=12); self.playground_result.grid(row=1, column=0, sticky="nsew", pady=(12, 0)); ttk.Button(right, text="Copiar resultado", style="Primary.TButton", command=lambda: self.copy_rendered(self.playground_result)).grid(row=2, column=0, sticky="e", pady=(12, 0))
+
+    def refresh_playground(self):
+        content = self.playground_editor.get("1.0", "end-1c"); names = prompt_variables(content); current = {name: var.get() for name, var in self.playground_values.items()};
+        for child in self.playground_vars.winfo_children(): child.destroy()
+        self.playground_values = {}
+        for index, name in enumerate(names):
+            ttk.Label(self.playground_vars, text=name, style="FieldLabel.TLabel").grid(row=index, column=0, sticky="w", pady=5); variable = tk.StringVar(value=current.get(name, "")); variable.trace_add("write", lambda *_: self.update_playground_result()); ttk.Entry(self.playground_vars, textvariable=variable).grid(row=index, column=1, sticky="ew", pady=5); self.playground_values[name] = variable
+        self.playground_vars.columnconfigure(1, weight=1); self.update_playground_result()
+
+    def update_playground_result(self):
+        if hasattr(self, "playground_result"):
+            self.playground_result.delete("1.0", "end"); self.playground_result.insert("1.0", render_prompt(self.playground_editor.get("1.0", "end-1c"), {key: value.get() for key, value in self.playground_values.items()}))
+
+    def copy_rendered(self, widget):
+        content = widget.get("1.0", "end-1c"); self.master.clipboard_clear(); self.master.clipboard_append(content); messagebox.showinfo(APP_NAME, "Resultado renderizado copiado.")
 
     def bind_card_hover(self, card):
         def set_state(style):
@@ -596,7 +677,7 @@ class MainApp(ttk.Frame):
 
     def prompt_tab(self):
         self.prompts = ttk.Frame(self.tabs, padding=(0, 4)); self.tabs.add(self.prompts, text="Prompts")
-        self.toolbar(self.prompts, "Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Relações", lambda: self.manage_relationships("prompts", self.prompt_tree)), ("Duplicar", lambda: self.duplicate_selected("prompts", self.prompt_tree)), ("Exportar coleção", lambda: self.export_collection("prompts", self.prompt_tree)), ("Histórico", self.show_prompt_history), ("Copiar", self.copy_prompt), ("★ Favoritar", lambda: self.toggle_flag("prompts", self.prompt_tree, "favorite")), ("📌 Fixar", lambda: self.toggle_flag("prompts", self.prompt_tree, "pinned"))], "＋ Novo Prompt", False)
+        self.toolbar(self.prompts, "Prompts", self.new_prompt, self.edit_prompt, lambda: self.delete(self.prompt_tree, "prompts"), [("Relações", lambda: self.manage_relationships("prompts", self.prompt_tree)), ("Duplicar", lambda: self.duplicate_selected("prompts", self.prompt_tree)), ("Exportar coleção", lambda: self.export_collection("prompts", self.prompt_tree)), ("Exportar JSON/MD/ZIP", self.export_prompt_package), ("Importar JSON/ZIP", self.import_prompt_package), ("Abrir Playground", lambda: self.tabs.select(self.playground)), ("Histórico", self.show_prompt_history), ("Copiar", self.copy_prompt), ("★ Favoritar", lambda: self.toggle_flag("prompts", self.prompt_tree, "favorite")), ("📌 Fixar", lambda: self.toggle_flag("prompts", self.prompt_tree, "pinned"))], "＋ Novo Prompt", False)
         frame, self.prompt_tree = self.tree(self.prompts, ("pin","fav","template","name","status","category","project","tool","tags"), ("📌","★","T","Nome","Status","Categoria","Projeto","Ferramenta","Tags")); self.prompt_tree.bind("<Double-1>", lambda _: self.edit_prompt())
         self.prompt_cards_canvas = tk.Canvas(self.prompts, bg=PALETTE["bg"], highlightthickness=0, borderwidth=0)
         scroll = ttk.Scrollbar(self.prompts, orient="vertical", command=self.prompt_cards_canvas.yview); scroll.pack(side="right", fill="y"); self.prompt_cards_canvas.pack(side="left", fill="both", expand=True); self.prompt_cards_canvas.configure(yscrollcommand=scroll.set)
@@ -616,7 +697,7 @@ class MainApp(ttk.Frame):
             ttk.Label(card, text=meta, style="CardMeta.TLabel").pack(anchor="w", pady=(5, 8))
             ttk.Label(card, text=row["tags"] or "Sem tags", style="CardTag.TLabel").pack(anchor="w")
             ttk.Label(card, text=f"Uso: {row["usage_count"] or 0}  •  Atualizado {row["updated_at"]}", style="CardMeta.TLabel").pack(anchor="w", pady=(12, 0))
-            actions = ttk.Frame(card, style="Card.TFrame"); actions.pack(fill="x", pady=(12, 0)); ttk.Button(actions, text="★" if row["favorite"] else "☆", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_toggle_prompt(rid, "favorite")).pack(side="left"); ttk.Button(actions, text="Abrir", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_open_prompt(rid)).pack(side="right")
+            actions = ttk.Frame(card, style="Card.TFrame"); actions.pack(fill="x", pady=(12, 0)); ttk.Button(actions, text="★" if row["favorite"] else "☆", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_toggle_prompt(rid, "favorite")).pack(side="left"); ttk.Button(actions, text="Preview", style="Quiet.TButton", command=lambda rid=row["id"]: self.preview_prompt(rid)).pack(side="right", padx=(0, 6)); ttk.Button(actions, text="Abrir", style="Quiet.TButton", command=lambda rid=row["id"]: self.card_open_prompt(rid)).pack(side="right")
             for widget in (card, *card.winfo_children()): widget.bind("<Double-1>", lambda _event, rid=row["id"]: self.card_open_prompt(rid))
 
     def card_select_prompt(self, rid):
@@ -627,6 +708,20 @@ class MainApp(ttk.Frame):
 
     def card_toggle_prompt(self, rid, column):
         self.card_select_prompt(rid); self.toggle_flag("prompts", self.prompt_tree, column)
+
+    def preview_prompt(self, rid):
+        row = self.storage.entity_row("prompts", rid)
+        if not row: return
+        win = tk.Toplevel(self); win.title(f"Preview — {row['name']}"); win.transient(self); win.geometry("980x650"); win.configure(bg=PALETTE["bg"]); win.columnconfigure(0, weight=1); win.rowconfigure(1, weight=1)
+        ttk.Label(win, text="PREVIEW DO PROMPT", style="Kicker.TLabel").grid(row=0, column=0, sticky="w", padx=22, pady=(18, 4)); body = ttk.Frame(win, padding=18); body.grid(row=1, column=0, sticky="nsew"); body.columnconfigure((0, 1), weight=1); body.rowconfigure(1, weight=1)
+        ttk.Label(body, text="Variáveis detectadas", style="Section.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8)); ttk.Label(body, text="Prompt final renderizado", style="Section.TLabel").grid(row=0, column=1, sticky="w", padx=(8, 0)); vars_frame = ttk.Frame(body, style="Card.TFrame", padding=14); vars_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 8)); vars_frame.columnconfigure(0, weight=1); result = tk.Text(body, wrap="word", bg=PALETTE["surface_raised"], fg=PALETTE["text"], relief="flat", font=("Inter", 13), padx=12, pady=12); result.grid(row=1, column=1, sticky="nsew", padx=(8, 0)); values = {}
+        vars_frame.columnconfigure(0, minsize=150)
+        for index, name in enumerate(prompt_variables(row["content"])):
+            ttk.Label(vars_frame, text=name, style="FieldLabel.TLabel").grid(row=index, column=0, sticky="w", pady=6); variable = tk.StringVar(); variable.trace_add("write", lambda *_: render()); ttk.Entry(vars_frame, textvariable=variable).grid(row=index, column=1, sticky="ew", pady=6); values[name] = variable
+        vars_frame.columnconfigure(1, weight=1)
+        def render():
+            result.delete("1.0", "end"); result.insert("1.0", render_prompt(row["content"], {key: value.get() for key, value in values.items()}))
+        render(); actions = ttk.Frame(win); actions.grid(row=2, column=0, sticky="e", padx=22, pady=(0, 18)); ttk.Button(actions, text="Copiar resultado", style="Primary.TButton", command=lambda: self.copy_rendered(result)).pack(side="left", padx=5); ttk.Button(actions, text="Fechar", style="Quiet.TButton", command=win.destroy).pack(side="left", padx=5)
 
     def tip_tab(self):
         self.tips = ttk.Frame(self.tabs, padding=12); self.tabs.add(self.tips, text="Governança")
@@ -699,15 +794,15 @@ class MainApp(ttk.Frame):
 
     def open_filters(self):
         win = tk.Toplevel(self); win.title("Filtros combinados"); win.transient(self); win.grab_set(); win.configure(bg=PALETTE["bg"]); self.center_window(win, 520, 430); box = ttk.Frame(win, padding=20, style="Modal.TFrame"); box.pack(fill="both", expand=True); box.columnconfigure(1, weight=1)
-        fields = [("Tags (todas, separadas por vírgula)",self.tag_filter),("Categoria",self.category_filter),("Status",self.status_filter),("Criado desde (AAAA-MM-DD)",self.date_from_filter),("Criado até (AAAA-MM-DD)",self.date_to_filter)]
+        fields = [("Tags (todas, separadas por vírgula)",self.tag_filter),("Categoria",self.category_filter),("Ferramenta",self.tool_filter),("Status",self.status_filter),("Criado desde (AAAA-MM-DD)",self.date_from_filter),("Criado até (AAAA-MM-DD)",self.date_to_filter)]
         for i,(label,var) in enumerate(fields):
             ttk.Label(box,text=label).grid(row=i,column=0,sticky="w",padx=(0,8),pady=6)
-            values = ["Todas"] + list(self.category_map.values()) if var is self.category_filter else ["Todos"] + CONTENT_STATUSES if var is self.status_filter else None
+            values = ["Todas"] + list(self.category_map.values()) if var is self.category_filter else ["Todas"] + PROMPT_TOOLS if var is self.tool_filter else ["Todos"] + CONTENT_STATUSES if var is self.status_filter else None
             widget = ttk.Combobox(box,textvariable=var,values=values,state="readonly") if values else ttk.Entry(box,textvariable=var); widget.grid(row=i,column=1,sticky="ew",pady=6)
-        ttk.Checkbutton(box,text="Somente favoritos",variable=self.favorite_filter).grid(row=5,column=1,sticky="w",pady=6); ttk.Checkbutton(box,text="Somente templates",variable=self.template_filter).grid(row=6,column=1,sticky="w",pady=6)
+        ttk.Checkbutton(box,text="Somente favoritos",variable=self.favorite_filter).grid(row=6,column=1,sticky="w",pady=6); ttk.Checkbutton(box,text="Somente templates",variable=self.template_filter).grid(row=7,column=1,sticky="w",pady=6)
         def clear():
-            self.tag_filter.set(""); self.category_filter.set("Todas"); self.status_filter.set("Todos"); self.date_from_filter.set(""); self.date_to_filter.set(""); self.favorite_filter.set(False); self.template_filter.set(False)
-        actions=ttk.Frame(box, style="Modal.TFrame"); actions.grid(row=7,column=0,columnspan=2,sticky="e",pady=14); ttk.Button(actions,text="Limpar",style="Quiet.TButton",command=clear).pack(side="left",padx=5); ttk.Button(actions,text="Aplicar filtros",style="Primary.TButton",command=lambda:(win.destroy(),self.refresh_all())).pack(side="left")
+            self.tag_filter.set(""); self.category_filter.set("Todas"); self.tool_filter.set("Todas"); self.status_filter.set("Todos"); self.date_from_filter.set(""); self.date_to_filter.set(""); self.favorite_filter.set(False); self.template_filter.set(False)
+        actions=ttk.Frame(box, style="Modal.TFrame"); actions.grid(row=8,column=0,columnspan=2,sticky="e",pady=14); ttk.Button(actions,text="Limpar",style="Quiet.TButton",command=clear).pack(side="left",padx=5); ttk.Button(actions,text="Aplicar filtros",style="Primary.TButton",command=lambda:(win.destroy(),self.refresh_all())).pack(side="left")
 
     def show_search_history(self):
         win=tk.Toplevel(self); win.title("Histórico de pesquisas"); win.transient(self); win.geometry("720x420"); frame,tree=self.tree(win,("query","filters","date"),("Pesquisa","Filtros","Data")); frame.pack(fill="both",expand=True,padx=12,pady=12)
@@ -781,6 +876,8 @@ class MainApp(ttk.Frame):
         for tag in [x.strip().lower() for x in self.tag_filter.get().replace(";",",").split(",") if x.strip()]: clauses.append("LOWER(COALESCE(tags,'')) LIKE ?"); values.append(f"%{tag}%")
         category = self.category_filter.get()
         if category and category != "Todas": clauses.append("category_id=?"); values.append(self.storage.category_id_for(category) or -1)
+        tool = self.tool_filter.get()
+        if tool and tool != "Todas" and "tool" in fields: clauses.append("tool=?"); values.append(tool)
         if self.favorite_filter.get(): clauses.append("favorite=1")
         if self.template_filter.get() and table != "files": clauses.append("is_template=1")
         status = self.status_filter.get()
@@ -812,13 +909,17 @@ class MainApp(ttk.Frame):
             for r in self.storage.db.execute(f"SELECT * FROM {table} WHERE is_template=1 ORDER BY updated_at DESC"): self.template_tree.insert("","end",iid=f"{table}:{r['id']}",values=(ENTITY_LABELS[table],r[ENTITY_NAME_FIELDS[table]],self.category_map.get(r["category_id"],r["category"] if "category" in r.keys() else ""),r["tags"] or "",r["updated_at"]))
         for r in self.storage.db.execute("SELECT c.*,COUNT(ci.id) items FROM collections c LEFT JOIN collection_items ci ON ci.collection_id=c.id GROUP BY c.id ORDER BY c.updated_at DESC"): self.collection_tree.insert("","end",iid=str(r["id"]),values=(r["name"],r["catalog"],r["description"] or "",r["items"],r["updated_at"]))
         self.refresh_home_context()
+        self.refresh_dashboard_metrics(); self.refresh_playground()
         filters=[]
         if self.tag_filter.get(): filters.append("tags: "+self.tag_filter.get())
         if self.category_filter.get()!="Todas": filters.append("categoria: "+self.category_filter.get())
+        if self.tool_filter.get()!="Todas": filters.append("ferramenta: "+self.tool_filter.get())
         if self.favorite_filter.get(): filters.append("favoritos")
         if self.template_filter.get(): filters.append("templates")
+        if self.date_from_filter.get(): filters.append("desde: "+self.date_from_filter.get())
+        if self.date_to_filter.get(): filters.append("até: "+self.date_to_filter.get())
         self.filter_summary.configure(text="Filtros: "+(" • ".join(filters) if filters else "nenhum")); self.refresh_job=None
-        if self.search_var.get().strip(): self.storage.record_search(self.search_var.get(), {"tipo":self.type_filter.get(),"tags":self.tag_filter.get(),"categoria":self.category_filter.get(),"favorito":self.favorite_filter.get(),"template":self.template_filter.get(),"status":self.status_filter.get()})
+        if self.search_var.get().strip(): self.storage.record_search(self.search_var.get(), {"tipo":self.type_filter.get(),"tags":self.tag_filter.get(),"categoria":self.category_filter.get(),"ferramenta":self.tool_filter.get(),"favorito":self.favorite_filter.get(),"template":self.template_filter.get(),"status":self.status_filter.get(),"desde":self.date_from_filter.get(),"até":self.date_to_filter.get()})
 
     def destroy(self):
         if self.refresh_job:
@@ -859,7 +960,7 @@ class MainApp(ttk.Frame):
         rid = self.selected(tree)
         if rid:
             row = self.storage.db.execute(f"SELECT {field} FROM {table} WHERE id=?", (rid,)).fetchone(); self.master.clipboard_clear(); self.master.clipboard_append(row[field])
-            if table == "prompts": self.storage.db.execute("UPDATE prompts SET usage_count=COALESCE(usage_count,0)+1,updated_at=? WHERE id=?", (now(), rid)); self.storage.db.commit(); self.refresh_all()
+            if table == "prompts": self.storage.db.execute("UPDATE prompts SET usage_count=COALESCE(usage_count,0)+1,updated_at=? WHERE id=?", (now(), rid)); self.storage.log_activity("cópia", "prompts", rid, row[field], commit=False); self.storage.db.commit(); self.refresh_all()
             messagebox.showinfo(APP_NAME, "Conteúdo copiado.")
     def copy_prompt(self): self.copy_row(self.prompt_tree, "prompts", "content")
     def copy_tip(self): self.copy_row(self.tip_tree, "tips", "content")
@@ -891,6 +992,49 @@ class MainApp(ttk.Frame):
             content = json.dumps(data, ensure_ascii=False, indent=2)
         Path(path).write_text(content, encoding="utf-8")
         messagebox.showinfo(APP_NAME, "Item exportado.")
+
+    def prompt_package_rows(self):
+        selected = self.prompt_tree.selection()
+        ids = [int(value) for value in selected] if selected else [row["id"] for row in self.query("prompts")]
+        return [dict(self.storage.entity_row("prompts", rid)) for rid in ids if self.storage.entity_row("prompts", rid)]
+
+    def export_prompt_package(self):
+        rows = self.prompt_package_rows()
+        if not rows: return
+        path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json"), ("Markdown", "*.md"), ("Pacote ZIP", "*.zip")], initialfile="prompts")
+        if not path or not self.confirm_export("A exportação dos prompts"): return
+        suffix = Path(path).suffix.lower(); payload = {"format":"spark-library-prompts", "version":1, "exported_at":now(), "prompts":rows}
+        if suffix == ".md": content = "\n".join(prompt_markdown(row) for row in rows); Path(path).write_text(content, encoding="utf-8")
+        elif suffix == ".zip":
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as bundle:
+                bundle.writestr("prompts.json", json.dumps(payload, ensure_ascii=False, indent=2)); bundle.writestr("prompts.md", "\n".join(prompt_markdown(row) for row in rows))
+        else: Path(path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.storage.log_activity("exportação", "prompts", None, Path(path).name); messagebox.showinfo(APP_NAME, "Prompts exportados.")
+
+    def import_prompt_package(self):
+        path = filedialog.askopenfilename(filetypes=[("JSON/Markdown/ZIP", "*.json *.md *.markdown *.zip")])
+        if not path: return
+        try:
+            source = Path(path)
+            if source.suffix.lower() == ".zip":
+                with zipfile.ZipFile(source) as bundle: payload = json.loads(bundle.read("prompts.json").decode("utf-8"))
+            elif source.suffix.lower() in {".md", ".markdown"}:
+                markdown = source.read_text(encoding="utf-8"); blocks = [block.strip() for block in markdown.split("\n# ") if block.strip()]; rows = []
+                for block in blocks:
+                    lines = block.splitlines(); name = lines[0].strip().lstrip("# "); prompt = block.split("## Prompt", 1)[-1].strip() if "## Prompt" in block else "\n".join(lines[1:]).strip(); rows.append({"name":name, "content":prompt, "category":"", "tool":"", "tags":""})
+                payload = {"prompts": rows}
+            else: payload = json.loads(source.read_text(encoding="utf-8"))
+            rows = payload.get("prompts", payload if isinstance(payload, list) else [])
+            if not rows: raise ValueError("Nenhum prompt encontrado no pacote")
+            if not messagebox.askyesno(APP_NAME, f"Importar {len(rows)} prompt(s) como cópias locais?", parent=self): return
+            self.storage.db.execute("BEGIN")
+            for row in rows:
+                data = {key:value for key,value in dict(row).items() if key not in {"id", "project_id", "category_id", "favorite_folder_id"} and key in {r["name"] for r in self.storage.db.execute("PRAGMA table_info(prompts)")}}
+                name = str(data.get("name") or "Prompt importado"); data["name"] = f"{name} (importado)"; data["created_at"] = now(); data["updated_at"] = now(); data["usage_count"] = 0; data["favorite"] = 0
+                cols = list(data); self.storage.db.execute(f"INSERT INTO prompts({','.join(cols)}) VALUES({','.join('?' for _ in cols)})", [data[col] for col in cols])
+            self.storage.log_activity("importação", "prompts", None, source.name, commit=False); self.storage.db.commit(); self.refresh_all(); messagebox.showinfo(APP_NAME, "Prompts importados sem sobrescrever dados existentes.")
+        except Exception as exc:
+            self.storage.db.rollback(); messagebox.showerror(APP_NAME, f"Importação cancelada: {exc}")
 
     def show_prompt_history(self):
         rid = self.selected(self.prompt_tree)

@@ -1,0 +1,12 @@
+flowchart TB
+    HOME["Biblioteca de Prompts"] --> CARD["Prompt Card\nNome • Tags • Uso\n[Preview] [Abrir]"]
+    CARD --> PREVIEW["Preview\nVariáveis detectadas\nNOME_PROJETO: [____]\nTOM: [____]\n\nPrompt renderizado\n[Copiar resultado]"]
+    HOME --> PLAY["Prompt Playground\nEditor local | Variáveis | Resultado\n[Copiar resultado]"]
+    HOME --> DASH["Dashboard\nTotal • Favoritos • Uso 30 dias\nTop prompts • Top categorias\nUso por período"]
+    HOME --> FILTER["Filtros avançados\nCategoria • Ferramenta • Tags\nFavoritos • Data\n[Aplicar]"]
+    HOME --> EXPORT["Intercâmbio local\nJSON • Markdown • ZIP\nExportar / Importar"]
+    classDef base fill:#0F1117,stroke:#2A3344,color:#FFFFFF
+    classDef accent fill:#222A39,stroke:#6366F1,color:#FFFFFF
+    classDef action fill:#1D2330,stroke:#818CF8,color:#FFFFFF
+    class HOME,CARD base
+    class PREVIEW,PLAY,DASH,FILTER,EXPORT accent

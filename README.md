@@ -4,7 +4,7 @@
 
 Aplicação desktop local para organizar prompts, projetos, governança, códigos e arquivos técnicos. Funciona offline, usa SQLite no dispositivo e não depende de IA, servidor externo ou GitHub durante o uso.
 
-**Versão em produção:** v1.1.0 — redesenho estrutural premium com sidebar, busca e cards, preservando os dados locais.
+**Versão em produção:** v1.2.0 — variáveis, Preview, Playground, Dashboard e intercâmbio local, preservando os dados locais.
 
 ## Navegação principal
 
@@ -25,7 +25,11 @@ A Home é focada em continuidade do trabalho, mostrando o contexto atual, onde o
 
 ## Compatibilidade e migração
 
-Não é necessária nenhuma migração destrutiva para a v1.1.0. A autenticação foi removida do fluxo de uso, as tabelas e configurações legadas permanecem intactas no SQLite e a nova coluna de uso é adicionada de forma compatível. O redesenho é compatível com dados existentes e backups existentes.
+Não é necessária nenhuma migração destrutiva para a v1.2.0. A autenticação foi removida do fluxo de uso, as tabelas e configurações legadas permanecem intactas no SQLite e a nova coluna de uso permanece compatível. Variáveis, Preview, Playground, métricas e intercâmbio são executados localmente e preservam dados existentes e backups existentes.
+
+## Recursos da v1.2.0
+
+A versão inclui variáveis no formato `{{NOME_VARIAVEL}}`, Preview interativo antes da cópia, Prompt Playground local, Dashboard com uso por prompt/categoria/período, filtros avançados por categoria/ferramenta/tags/favoritos/data e exportação/importação de prompts em JSON, Markdown e ZIP. Nenhum desses recursos depende de IA, APIs ou internet.
 
 ## Instalação
 

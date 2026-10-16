@@ -137,3 +137,45 @@ git diff --check
 - [ZIP Windows portátil](https://github.com/ericasouzaqa/biblioteca-de-prompts/releases/download/v1.1.0/BibliotecaDePrompts-Windows.zip)
 
 O workflow Windows foi aprovado em todas as etapas. O ZIP publicado possui 14.925.537 bytes e SHA-256 `f3c4a10678f2685945da86b7a2288b42b8c77209244e77b16cdf8eeaaabb7c23`. O executável possui 15.272.126 bytes e SHA-256 `d971bc3945b85e24eb9f5b9ca4a049ba0c694b02d5d743d4b3de4ddac348d48b`.
+
+
+## Versão 1.2.0 — Variáveis, Preview, Playground e Dashboard
+
+A v1.2.0 evolui a Spark Library como estação local de trabalho para prompts, preservando a arquitetura Python/Tkinter + SQLite e o princípio de independência operacional. O plano técnico completo está em [PLANO_TECNICO_v1.2.0.md](docs/PLANO_TECNICO_v1.2.0.md).
+
+### Implementação
+
+A sintaxe `{{NOME_VARIAVEL}}` é detectada localmente por regex, com nomes únicos em ordem de aparição. O Preview apresenta campos de valores e uma área de resultado renderizado; valores ausentes permanecem como placeholders para evitar perda silenciosa. O Prompt Playground oferece editor, campos de variáveis, resultado e cópia, sem salvar automaticamente e sem depender de IA.
+
+O Dashboard usa `usage_count` e `activity_log` já existentes. Exibe total de prompts, favoritos, uso acumulado, uso nos últimos 30 dias, ranking de prompts, ranking de categorias e uso diário no período. A cópia de um prompt continua incrementando `usage_count` e agora registra o evento local de cópia para métricas temporais.
+
+Os filtros avançados foram ampliados para categoria, ferramenta, tags, favoritos, status, templates e datas. O intercâmbio de prompts suporta JSON, Markdown e ZIP; o ZIP contém `prompts.json` e `prompts.md`. Importações criam cópias com sufixo `(importado)`, IDs novos e sem sobrescrever itens existentes.
+
+### Wireframes e evidências
+
+- [Plano técnico v1.2.0](docs/PLANO_TECNICO_v1.2.0.md)
+- [Wireframes v1.2.0 em Mermaid](docs/wireframes_v1.2.0.mmd)
+- [Wireframes v1.2.0 renderizados](docs/wireframes_v1.2.0.png)
+- [Screenshot do Dashboard](screenshots_v120_dashboard.png)
+- [Screenshot do Playground](screenshots_v120_playground.png)
+- [Screenshot do Preview](screenshots_v120_preview.png)
+
+### Compatibilidade e independência
+
+Nenhuma migration nova foi necessária. SQLite, backups, restore, histórico, favoritos e repositórios foram preservados. A v1.2.0 não introduz IA em runtime, APIs externas, internet obrigatória, tokens ou serviços de nuvem.
+
+### Testes v1.2.0
+
+A suíte legada e os novos testes foram aprovados:
+
+```text
+STORAGE_TESTS_OK
+GUI_SMOKE_OK
+REGRESSION_TESTS_OK
+PRODUCTION_MODE_TESTS_OK
+UX_REVIEW_TESTS_OK
+V120_TESTS_OK
+git diff --check
+```
+
+O teste `test_v120.py` cobre extração e renderização de variáveis, métricas, Dashboard, Playground, filtro por ferramenta e exportação ZIP com JSON e Markdown.
